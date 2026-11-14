@@ -1,0 +1,5 @@
+{
+  "name": "dev-workflow",
+  "description": "issue 棚卸し・セッション払い出し・レビュー往復など、プロジェクト非依存の開発ワークフロー",
+  "author": { "name": "hayato1980" }
+}
