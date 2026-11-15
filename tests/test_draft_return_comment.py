@@ -71,7 +71,17 @@ def test_table_lists_every_check_in_the_given_order_with_the_run_url() -> None:
         out = run(DRAFT_RESULT=result).stdout
         rows = [line for line in out.splitlines() if line.startswith("| `")]
         assert rows == ["| `install` | success |", "| `lint tool` | success |", "| `test` | failure |"]
-        assert "gate" in out and "https://example.invalid/runs/1" in out
+        assert "`gate`" in out and "https://example.invalid/runs/1" in out
+
+
+def test_several_jobs_can_be_listed_without_a_single_job_name() -> None:
+    """呼び出し側が複数ジョブを needs に持つとき、job-name を決めなくてよい。表は汎用の見出し。"""
+    env = {"PATH": "/usr/bin:/bin", "DRAFT_RESULT": "success", "RUN_URL": "u", "CHECKS": "lint=failure\ntest=success"}
+    proc = subprocess.run(["bash", str(SCRIPT)], env=env, capture_output=True, text=True, check=False)
+    assert proc.returncode == 0, proc.stderr
+    assert "| ジョブ / 検査 | 結果 |" in proc.stdout
+    assert "| `lint` | failure |" in proc.stdout and "| `test` | success |" in proc.stdout
+    assert "落ちたジョブ" not in proc.stdout
 
 
 def test_empty_outcome_is_shown_as_not_run() -> None:
@@ -101,9 +111,7 @@ def test_retry_guidance_is_absent_when_the_pr_could_not_be_converted() -> None:
     assert "再度 Ready for review にすると" not in out
 
 
-def test_job_and_run_url_are_required() -> None:
-    for missing in ("JOB_NAME", "RUN_URL"):
-        env = {"PATH": "/usr/bin:/bin", "JOB_NAME": "g", "RUN_URL": "u", "DRAFT_RESULT": "success"}
-        del env[missing]
-        proc = subprocess.run(["bash", str(SCRIPT)], env=env, capture_output=True, text=True, check=False)
-        assert proc.returncode != 0 and missing in proc.stderr
+def test_run_url_is_required() -> None:
+    env = {"PATH": "/usr/bin:/bin", "DRAFT_RESULT": "success"}
+    proc = subprocess.run(["bash", str(SCRIPT)], env=env, capture_output=True, text=True, check=False)
+    assert proc.returncode != 0 and "RUN_URL" in proc.stderr

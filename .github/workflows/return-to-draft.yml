@@ -17,6 +17,9 @@
 #     secrets:
 #       draft_token: ${{ secrets.MY_DRAFT_TOKEN }}
 #
+# ⚠️ **呼び出し側は `@main` で参照すること（sha やタグで固定しない）。** 中で使う composite action も
+# `@main` で呼ぶため、この workflow だけを古い ref に固定しても action は最新が動き、main で
+# action の入力や本文を変えると、固定した呼び出し側が入力の不一致で壊れる（または挙動が黙って変わる）。
 # ⚠️ `secrets` は必要なものを名指しで渡す（一括で引き継ぐ書き方はしない。このリポは公開で、
 # 呼び出し側は非公開のことがある）。
 # ⚠️ GitHub 標準のトークンでは PR を draft に戻せない（権限を足しても FORBIDDEN）。戻すには
@@ -29,15 +32,15 @@ on:
   workflow_call:
     inputs:
       job-name:
-        description: 落ちたジョブの名前（コメントの表の見出しに出す）
+        description: 落ちたジョブの名前（任意。呼び出し側が複数ジョブを needs に持つなら空にして checks だけで一覧を渡す）
         type: string
-        required: true
+        default: ""
       job-result:
         description: そのジョブの結果（needs.<job>.result）
         type: string
         default: ""
       checks:
-        description: 検査ごとの結果。`名前=結果` を 1 行 1 件（結果が空なら「実行されていない」と書く）
+        description: ジョブまたは検査ごとの結果。`名前=結果` を 1 行 1 件（例 `lint=${{ needs.lint.result }}`。結果が空なら「実行されていない」と書く）
         type: string
         default: ""
       note:

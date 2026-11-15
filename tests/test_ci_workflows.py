@@ -37,7 +37,7 @@ def test_return_to_draft_is_reusable_and_takes_the_token_as_a_named_optional_sec
     on = triggers(load(RETURN))
     assert list(on) == ["workflow_call"]
     assert on["workflow_call"]["secrets"]["draft_token"]["required"] is False
-    assert on["workflow_call"]["inputs"]["job-name"]["required"] is True
+    assert not on["workflow_call"]["inputs"]["job-name"].get("required"), "複数ジョブの呼び出し側が job-name を決めなくてよい"
 
 
 def test_no_workflow_or_action_uses_secrets_inherit() -> None:
@@ -97,3 +97,12 @@ def test_comment_action_is_composite_and_expands_no_input_inside_run() -> None:
     assert action["runs"]["using"] == "composite"
     for s in action["runs"]["steps"]:
         assert "${{" not in s.get("run", ""), "入力を run に直接展開しない（env 経由）"
+
+
+def test_workflow_tells_callers_not_to_pin_it_to_anything_but_main() -> None:
+    """中の composite action は @main で呼ぶ。固定した呼び出し側が、action の入力の変更で壊れる。"""
+    text = RETURN.read_text(encoding="utf-8")
+    assert "@main` で参照すること" in text
+    assert "@main" in (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+    inner = [s["uses"] for s in job()["steps"] if "uses" in s]
+    assert all(u.endswith("@main") for u in inner), "action の参照先を変えたら、上の注意書きも直す"

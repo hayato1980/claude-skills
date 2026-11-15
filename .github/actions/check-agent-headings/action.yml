@@ -17,8 +17,7 @@ runs:
         ROOT: ${{ inputs.root }}
         IGNORE: ${{ inputs.ignore }}
       run: |
-        args=()
-        for f in $IGNORE; do args+=(--ignore "$f"); done
+        # IGNORE の分割は python 側で行う（シェルで展開すると glob がカレントに対して展開される）。
         python3 "$ACTION_PATH/check_agent_headings.py" \
           --spec "$ACTION_PATH/../../../plugins/dev-workflow/agent-headings.json" \
-          --root "$ROOT" "${args[@]}"
+          --root "$ROOT" --ignore-list "$IGNORE"

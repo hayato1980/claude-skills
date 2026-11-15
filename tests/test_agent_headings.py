@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from conftest import PLUGIN, REPO_ROOT
+from conftest import PLUGIN, REPO_ROOT, SCRIPTS
 
 SCRIPT = REPO_ROOT / ".github" / "actions" / "check-agent-headings" / "check_agent_headings.py"
 SPEC = PLUGIN / "agent-headings.json"
@@ -64,9 +64,24 @@ def test_heading_must_match_exactly_at_level_two(tmp_path: Path) -> None:
     assert "## 見出し甲" in proc.stderr and "## 見出し乙" in proc.stderr
 
 
-def test_trailing_whitespace_is_tolerated(tmp_path: Path) -> None:
+def test_trailing_whitespace_and_cr_are_not_a_match(tmp_path: Path) -> None:
+    """スキル側（blocking_jobs.sh 等）は行の完全一致で読む。検査だけが緩いと、緑なのにスキルが読めない。"""
     make_doc(tmp_path, "a.md", "## 見出し甲  \n## 見出し乙\r\n")
-    assert run(make_spec(tmp_path, ONE), tmp_path).returncode == 0
+    proc = run(make_spec(tmp_path, ONE), tmp_path)
+    assert proc.returncode == 1
+    assert "## 見出し甲" in proc.stderr and "## 見出し乙" in proc.stderr
+
+
+def test_the_rule_agrees_with_the_skill_side_reader(tmp_path: Path) -> None:
+    """スキル側の実読者（blocking_jobs.sh）が読めない文書を、この検査も通さない。"""
+    reader = SCRIPTS / "blocking_jobs.sh"
+    spec = make_spec(tmp_path, [{"path": "docs/agents/a.md", "headings": ["CI で止めるジョブ"]}])
+    for body in ("## CI で止めるジョブ\n- `g`\n", "## CI で止めるジョブ \n- `g`\n", "## CI で止めるジョブ\r\n- `g`\r\n"):
+        make_doc(tmp_path, "a.md", body)
+        skill_reads = subprocess.run(
+            ["bash", str(reader), str(tmp_path / "docs" / "agents" / "a.md")], capture_output=True, check=False
+        ).returncode == 0
+        assert (run(spec, tmp_path).returncode == 0) == skill_reads, repr(body)
 
 
 def test_missing_required_file_fails(tmp_path: Path) -> None:
@@ -86,6 +101,25 @@ def test_ignored_file_is_skipped(tmp_path: Path) -> None:
     assert run(make_spec(tmp_path, ONE), tmp_path, "docs/agents/a.md").returncode == 0
 
 
+def run_with_list(spec: Path, root: Path, ignore_list: str, cwd: Path) -> subprocess.CompletedProcess[str]:
+    cmd = [sys.executable, str(SCRIPT), "--spec", str(spec), "--root", str(root), "--ignore-list", ignore_list]
+    return subprocess.run(cmd, capture_output=True, text=True, check=False, cwd=cwd)
+
+
+def test_ignore_list_is_split_on_whitespace_and_never_globbed(tmp_path: Path) -> None:
+    """glob はカレントに対して展開される。root を変えている呼び出し側で、外すファイルがずれる。"""
+    files = [*ONE, {"path": "docs/agents/b.md", "headings": ["丙"]}]
+    spec = make_spec(tmp_path, files)
+    root = tmp_path / "root"
+    root.mkdir()
+    cwd = tmp_path / "cwd"
+    make_doc(cwd, "a.md", "")  # カレントに a.md があっても、glob で拾われてはいけない
+    both = run_with_list(spec, root, "docs/agents/a.md  docs/agents/b.md", cwd)
+    assert both.returncode == 0, both.stderr
+    glob = run_with_list(spec, root, "docs/agents/*.md", cwd)
+    assert glob.returncode == 1, "glob は展開せず、文字列としてしか照合しない"
+
+
 def test_every_missing_heading_is_reported_in_one_run(tmp_path: Path) -> None:
     files = [*ONE, {"path": "docs/agents/b.md", "headings": ["丙"]}]
     make_doc(tmp_path, "a.md", "# t\n")
@@ -100,6 +134,28 @@ def test_broken_spec_is_a_usage_error_not_a_silent_pass(tmp_path: Path) -> None:
     spec.write_text("{}", encoding="utf-8")
     assert run(spec, tmp_path).returncode == 3
     assert run(tmp_path / "nope.json", tmp_path).returncode == 3
+
+
+@pytest.mark.parametrize(
+    "entry",
+    [
+        {"headings": ["x"]},
+        {"path": "docs/agents/a.md"},
+        {"path": "docs/agents/a.md", "headings": "見出し甲"},
+        {"path": "docs/agents/a.md", "headings": []},
+        {"path": "docs/agents/a.md", "headings": [1]},
+        {"path": 1, "headings": ["x"]},
+        {"path": "docs/agents/a.md", "headings": ["x"], "optional": "yes"},
+        "docs/agents/a.md",
+    ],
+    ids=["no-path", "no-headings", "str-headings", "empty-headings", "non-str-heading", "non-str-path", "bad-optional", "not-a-dict"],
+)
+def test_malformed_entry_is_a_usage_error_without_a_traceback(tmp_path: Path, entry: object) -> None:
+    """終了コード 1（不足あり）と区別する。トレースバックも出さない。"""
+    make_doc(tmp_path, "a.md", "## x\n")
+    proc = run(make_spec(tmp_path, [entry]), tmp_path)  # type: ignore[list-item]
+    assert proc.returncode == 3
+    assert "Traceback" not in proc.stderr
 
 
 # --- 一覧とスキル本文の整合 -----------------------------------------------------
@@ -131,6 +187,26 @@ def test_every_listed_heading_is_read_by_a_skill() -> None:
 def test_every_heading_a_skill_reads_is_listed() -> None:
     """スキルが読むのに一覧に無い見出しは、変えられても検出されない。"""
     assert referenced_headings() - listed_headings() == set()
+
+
+README_ROW = re.compile(r"^\|\s*`(docs/agents/[^`]+)`\s*\|(.*)$")
+
+
+def readme_pairs() -> set[tuple[str, str]]:
+    """README の表（ファイル列と、契約する見出し列）から (ファイル, 見出し) の対を取る。"""
+    pairs: set[tuple[str, str]] = set()
+    for line in (REPO_ROOT / "README.md").read_text(encoding="utf-8").splitlines():
+        row = README_ROW.match(line)
+        if row:
+            pairs |= {(row.group(1), h) for h in BACKTICKED_HEADING.findall(row.group(2))}
+    return pairs
+
+
+def test_listed_pairs_match_the_readme_table_by_file_and_heading() -> None:
+    """集合同士の比較では、見出しを別ファイルのエントリへ移しても緑のまま、利用側に誤ったファイルを要求する。"""
+    spec = json.loads(SPEC.read_text(encoding="utf-8"))
+    listed = {(e["path"], h) for e in spec["files"] for h in e["headings"]}
+    assert listed == readme_pairs()
 
 
 @pytest.mark.parametrize("entry", json.loads(SPEC.read_text(encoding="utf-8"))["files"], ids=lambda e: e["path"])

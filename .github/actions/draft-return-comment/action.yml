@@ -5,8 +5,8 @@ inputs:
     description: draft 化ステップの outcome（success / failure / skipped）
     required: true
   job-name:
-    description: 落ちたジョブの名前
-    required: true
+    description: 落ちたジョブの名前（任意。複数ジョブなら空にして checks だけで一覧を渡す）
+    default: ""
   job-result:
     description: 落ちたジョブの結果
     default: ""

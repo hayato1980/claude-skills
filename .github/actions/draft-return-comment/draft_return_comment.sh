@@ -8,15 +8,14 @@
 #   DRAFT_RESULT  draft 化ステップの結果。`success` だけが「戻せた」側。`skipped` はトークン未登録で
 #                 戻す操作をしなかった。それ以外（`failure` / 空 / 未知の値）はすべて「戻せていない」側に
 #                 倒し、本スクリプトは落ちない（落ちるとコメントが 1 件も出ない）
-#   JOB_NAME      落ちたジョブの名前（表の見出しに出す。必須）
-#   JOB_RESULT    そのジョブの結果
-#   CHECKS        `名前=結果` を 1 行 1 件。結果が空なら「実行されていない」と表に書く
+#   JOB_NAME      落ちたジョブの名前（任意。複数ジョブなら空にして CHECKS だけで一覧を渡す）
+#   JOB_RESULT    そのジョブの結果（JOB_NAME があるときだけ使う）
+#   CHECKS        `名前=結果` を 1 行 1 件。名前はジョブでも検査でもよい（例: `lint=success`）。結果が空なら「実行されていない」と表に書く
 #   RUN_URL       この run の URL（必須）
 #   NOTE          成否によらず末尾に足す文（任意。手元での再現方法など）
 #   RETRY_NOTE    戻せたときだけ書く復帰手順（任意。既定は再度 Ready for review の案内）
 set -euo pipefail
 
-: "${JOB_NAME:?JOB_NAME is required}"
 : "${RUN_URL:?RUN_URL is required}"
 NOT_RUN="実行されていない"
 result="${DRAFT_RESULT:-}"
@@ -48,7 +47,11 @@ EOF2
 fi
 
 echo
-echo "| 検査（\`${JOB_NAME}\` ジョブ: ${JOB_RESULT:-$NOT_RUN}） | 結果 |"
+if [ -n "${JOB_NAME:-}" ]; then
+  echo "落ちたジョブ: \`${JOB_NAME}\`（${JOB_RESULT:-$NOT_RUN}）"
+  echo
+fi
+echo "| ジョブ / 検査 | 結果 |"
 echo "| --- | --- |"
 while IFS= read -r line; do
   [ -n "$line" ] || continue
