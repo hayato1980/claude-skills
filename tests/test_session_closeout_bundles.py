@@ -84,11 +84,11 @@ class TestGroup:
         assert "issue-<番号> タグが無い" in g.excluded[0][1]
 
     def test_other_repo_session_is_excluded_even_with_issue_tag(self) -> None:
-        other = _row("x", tags=["issue-815"], url="https://github.com/hayato1980/keibaai_cloud")
+        other = _row("x", tags=["issue-815"], url="https://github.com/acme/other")
         g = group([parse_page(_page_json([other, _row("b", tags=["issue-815"])]))], self_id=None, issues=None, repo=REPO)
         assert [s.id for s in g.bundles[815]] == ["b"]
         assert [(s.id, reason) for s, reason in g.excluded] == [
-            ("x", "別リポ（https://github.com/hayato1980/keibaai_cloud）のセッション")
+            ("x", "別リポ（https://github.com/acme/other）のセッション")
         ]
 
     def test_repo_url_with_git_suffix_or_slash_is_still_this_repo(self) -> None:
