@@ -7,7 +7,7 @@
 
 | プラグイン | 中身 |
 |---|---|
-| `dev-workflow` | プロジェクト非依存の開発ワークフロー。スキル 5 本（`issue-inventory` / `review-dialogue` / `create-ccw-session` / `ready-merge` / `session-closeout`）と hook 2 本（`tdd-review-dispatch` / `deny-mattpocock-implement`）、マージゲートのスクリプト（`ready_wait_merge.sh` / `judge_gate_checks.sh`） |
+| `dev-workflow` | プロジェクト非依存の開発ワークフロー。スキル 5 本（`issue-inventory` / `review-dialogue` / `create-ccw-session` / `ready-merge` / `session-closeout`）と hook 3 本（`tdd-review-dispatch` / `deny-mattpocock-implement` / `update-plugins`）、マージゲートのスクリプト（`ready_wait_merge.sh` / `judge_gate_checks.sh`） |
 
 ## 導入する
 
@@ -32,7 +32,7 @@
   claude plugin install dev-workflow@hayato || true
   ```
 
-  Setup script は環境のスナップショットを作るときにしか走らないので、**このリポジトリへの変更はすぐには届かない**（Setup script・許可ホストの変更か、約7日の期限切れでスナップショットが作り直されたとき）。早く届けたいなら、利用側の SessionStart フックで `claude plugin marketplace update hayato` と `claude plugin update dev-workflow@hayato` を走らせる（反映は次の claude プロセスから）。
+  Setup script は環境のスナップショットを作るときにしか走らないので、**このリポジトリへの変更はすぐには届かない**（Setup script・許可ホストの変更か、約7日の期限切れでスナップショットが作り直されたとき）。早く届けるため、プラグイン自身が SessionStart hook（`update-plugins`）で `marketplace update` → `plugin update` を背景で走らせる（反映は次の claude プロセスから。ログは `/tmp/dev-workflow-plugin-update.log`）。`marketplace add` / `install` はしないので、初回の導入は上の Setup script が担う。
 - ローカルは `/plugin marketplace update hayato` で更新する。
 - `plugin.json` に `version` をあえて書かない（書くと版を上げ忘れた変更が配られない。無ければコミット単位で更新される）。
 
@@ -54,6 +54,7 @@
 | `docs/agents/pr-merge-gate.md` | `ready-merge`・`ready_wait_merge.sh` | `## CI で止めるジョブ`（`- \`ジョブ名\`` の箇条書き。**無い・空ならマージしない**） |
 | `docs/agents/ccw-dispatch.md` | `create-ccw-session` | `## 払い出しを止めるラベル`／`## タグの決め方`／`## モデル表に足す行`／`## source_url` |
 | `docs/agents/dev-workflow.md` | `deny-mattpocock-implement` hook | `## /implement` の下に `止める: はい`（または `いいえ`）。無ければ止めない |
+| `docs/agents/plugin-update.md` | `update-plugins` hook | `## 更新するプラグイン` の下に `- \`プラグイン名@マーケットプレイス名\`` の箇条書き。無ければ `dev-workflow@hayato` だけ更新する |
 
 ### 各リポに置く中継スクリプト
 
