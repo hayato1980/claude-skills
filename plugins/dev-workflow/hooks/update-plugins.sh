@@ -9,37 +9,36 @@
 #
 # - 更新だけを行う。`marketplace add` / `install` はしない（入っているから hook が動いている）。
 # - 更新対象は、対象リポの docs/agents/plugin-update.md の見出し `## 更新するプラグイン` の下の
-#   箇条書き（`- \`プラグイン名@マーケットプレイス名\``）。ファイルや見出しが無いときは
-#   このプラグイン自身（dev-workflow@hayato）だけを更新する。
-# - 二重起動（resume / compact での再発火、同じコンテナの並行セッション）は flock -n で止める。
+#   箇条書き（`- \`プラグイン名@マーケットプレイス名\``）。この一覧は**既定に足される**:
+#   このプラグイン自身（dev-workflow@hayato）は常に更新し、一覧に書かれていてもいなくても同じ。
+# - 起動は hooks.json の matcher `startup` で新しい claude プロセスの開始時だけ。
+#   同時に走る分（同じコンテナの並行セッション）は flock -n で止める。
 # - 結果を待つ意味が無いので setsid で切り離してセッション開始を待たせない。setsid が無ければ起動しない。
 # - どこで失敗しても exit 0。プラグインが古くてもセッションは動くべきため。
 #
 # 環境変数:
-#   DEV_WORKFLOW_SKIP_PLUGIN_UPDATE=1     何もしない
+#   DEV_WORKFLOW_SKIP_PLUGIN_UPDATE=1     何もしない（利用側が更新を止めたいとき）
 #   DEV_WORKFLOW_PLUGIN_UPDATE_LOG        ログ（既定 /tmp/dev-workflow-plugin-update.log。追記）
 #   DEV_WORKFLOW_PLUGIN_UPDATE_LOCK       ロックファイル（既定 /tmp/dev-workflow-plugin-update.lock）
-#   DEV_WORKFLOW_PLUGIN_UPDATE_FOREGROUND=1  背景に出さず、この場で実行する（テスト用）
+# 引数 --run: 背景に出さず、この場で実行する（背景起動の中身。テストも使う）
 set -u
 
-DEFAULT_PLUGIN="dev-workflow@hayato"
+SELF_PLUGIN="dev-workflow@hayato"
 LOG_FILE="${DEV_WORKFLOW_PLUGIN_UPDATE_LOG:-/tmp/dev-workflow-plugin-update.log}"
 LOCK_FILE="${DEV_WORKFLOW_PLUGIN_UPDATE_LOCK:-/tmp/dev-workflow-plugin-update.lock}"
 
-# 更新対象を 1 行 1 件で標準出力に出す。
+# 更新対象を 1 行 1 件で標準出力に出す。自身が先頭、続いて設定の一覧（重複は除く）。
 list_plugins() {
-  local config="${CLAUDE_PROJECT_DIR:-$PWD}/docs/agents/plugin-update.md" found=""
-  if [ -f "${config}" ]; then
-    found="$(awk '
-      /^## / { in_section = ($0 == "## 更新するプラグイン"); next }
-      in_section && /^- `[^`@ ]+@[^`@ ]+`/ { s = $0; sub(/^- `/, "", s); sub(/`.*/, "", s); print s }
-    ' "${config}" 2>/dev/null || true)"
-  fi
-  if [ -n "${found}" ]; then
-    printf '%s\n' "${found}"
-  else
-    printf '%s\n' "${DEFAULT_PLUGIN}"
-  fi
+  local config="${CLAUDE_PROJECT_DIR:-$PWD}/docs/agents/plugin-update.md"
+  printf '%s\n' "${SELF_PLUGIN}"
+  [ -f "${config}" ] || return 0
+  awk -v self="${SELF_PLUGIN}" '
+    /^## / { in_section = ($0 == "## 更新するプラグイン"); next }
+    in_section && /^- `[^`@ ]+@[^`@ ]+`/ {
+      s = $0; sub(/^- `/, "", s); sub(/`.*/, "", s)
+      if (s != self && !(s in seen)) { seen[s] = 1; print s }
+    }
+  ' "${config}" 2>/dev/null || true
 }
 
 run_update() {
@@ -55,22 +54,29 @@ run_update() {
     fi
   fi
 
-  local plugin marketplace
+  local plugins plugin marketplace seen=" "
+  plugins="$(list_plugins)"
+
+  # 先に marketplace を重複なく全部更新し、そのあとプラグインを更新する。
+  # fd 9（ロック）は claude に引き継がない: 孫プロセスが残ってもロックを握り続けないため。
   while IFS= read -r plugin; do
-    [ -n "${plugin}" ] || continue
     marketplace="${plugin#*@}"
-    claude plugin marketplace update "${marketplace}" \
+    case "${seen}" in *" ${marketplace} "*) continue ;; esac
+    seen="${seen}${marketplace} "
+    claude plugin marketplace update "${marketplace}" 9>&- \
       || echo "WARNING: ${marketplace} の marketplace update に失敗（キャッシュのまま続行）" >&2
-    claude plugin update "${plugin}" \
+  done <<<"${plugins}"
+  while IFS= read -r plugin; do
+    claude plugin update "${plugin}" 9>&- \
       || echo "WARNING: ${plugin} の update に失敗（導入済みの版のまま）" >&2
-  done < <(list_plugins)
+  done <<<"${plugins}"
   return 0
 }
 
 [ "${DEV_WORKFLOW_SKIP_PLUGIN_UPDATE:-0}" = "1" ] && exit 0
 command -v claude >/dev/null 2>&1 || exit 0
 
-if [ "${1:-}" = "--run" ] || [ "${DEV_WORKFLOW_PLUGIN_UPDATE_FOREGROUND:-0}" = "1" ]; then
+if [ "${1:-}" = "--run" ]; then
   run_update
   exit 0
 fi
