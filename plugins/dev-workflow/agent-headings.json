@@ -2,19 +2,39 @@
   "files": [
     {
       "path": "docs/agents/review-dialogue.md",
-      "headings": ["オーナーマージの基準表", "CI が走る条件", "push 前に流すコマンド"]
+      "headings": [
+        "オーナーマージの基準表",
+        "CI が走る条件",
+        "push 前に流すコマンド"
+      ]
     },
     {
       "path": "docs/agents/pr-merge-gate.md",
-      "headings": ["CI で止めるジョブ"]
+      "headings": [
+        "CI で止めるジョブ"
+      ]
     },
     {
       "path": "docs/agents/ccw-dispatch.md",
-      "headings": ["払い出しを止めるラベル", "タグの決め方", "モデル表に足す行", "source_url"]
+      "headings": [
+        "払い出しを止めるラベル",
+        "タグの決め方",
+        "モデル表に足す行",
+        "source_url"
+      ]
     },
     {
       "path": "docs/agents/dev-workflow.md",
-      "headings": ["/implement"],
+      "headings": [
+        "/implement"
+      ],
+      "optional": true
+    },
+    {
+      "path": "docs/agents/plugin-update.md",
+      "headings": [
+        "更新するプラグイン"
+      ],
       "optional": true
     }
   ]

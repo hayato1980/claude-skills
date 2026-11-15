@@ -40,7 +40,7 @@ on:
         type: string
         default: ""
       checks:
-        description: ジョブまたは検査ごとの結果。`名前=結果` を 1 行 1 件（例 `lint=${{ needs.lint.result }}`。結果が空なら「実行されていない」と書く）
+        description: ジョブまたは検査ごとの結果。`名前=結果` を 1 行 1 件（例 `lint=<needs.lint.result>`。結果が空なら「実行されていない」と書く）
         type: string
         default: ""
       note:

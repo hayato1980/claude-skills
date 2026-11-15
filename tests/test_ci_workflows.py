@@ -106,3 +106,14 @@ def test_workflow_tells_callers_not_to_pin_it_to_anything_but_main() -> None:
     assert "@main" in (REPO_ROOT / "README.md").read_text(encoding="utf-8")
     inner = [s["uses"] for s in job()["steps"] if "uses" in s]
     assert all(u.endswith("@main") for u in inner), "action の参照先を変えたら、上の注意書きも直す"
+
+
+def test_workflow_call_descriptions_contain_no_template_expression() -> None:
+    """description は式を書ける場所ではない。`${{` を書くと workflow ごと invalid になりうる。"""
+    declared = triggers(load(RETURN))["workflow_call"]
+    for group in ("inputs", "secrets"):
+        for name, spec in declared[group].items():
+            assert "${{" not in str(spec.get("description", "")), f"{group}.{name}"
+    for path in (CHECK_ACTION, COMMENT_ACTION):
+        for name, spec in load(path)["inputs"].items():
+            assert "${{" not in str(spec.get("description", "")), f"{path.parent.name}.{name}"
