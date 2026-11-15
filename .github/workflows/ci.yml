@@ -1,0 +1,36 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq jq shellcheck
+          python -m pip install pytest
+      - name: shellcheck
+        run: shellcheck plugins/dev-workflow/scripts/*.sh plugins/dev-workflow/hooks/*.sh plugins/dev-workflow/templates/*.sh
+      - name: pytest
+        run: python -m pytest tests -q
+      - name: No private names (public repository)
+        run: |
+          # 文字クラスで組んであり、このステップ自身にはヒットしない。
+          if git grep -niE '[k]eiba|[p]ckeiba|[j]rvltsql|[t]erraform|[a]urora'; then
+            echo "公開リポに載せてはいけない語が含まれています" >&2
+            exit 1
+          fi
+      - name: Validate plugin
+        run: npx --yes @anthropic-ai/claude-code plugin validate .
