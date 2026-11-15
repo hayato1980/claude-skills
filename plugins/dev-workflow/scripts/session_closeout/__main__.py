@@ -36,10 +36,11 @@ def _default_self_id() -> str | None:
 
 
 def _default_repo() -> str:
+    # 中継が SESSION_CLOSEOUT_REPO_ROOT で対象リポを渡す（cwd は変えない: 結果ファイルの相対パスを保つため）。
+    root = os.environ.get("SESSION_CLOSEOUT_REPO_ROOT")
+    cmd = ["git", *(["-C", root] if root else []), "remote", "get-url", "origin"]
     try:
-        url = subprocess.run(
-            ["git", "remote", "get-url", "origin"], capture_output=True, text=True, check=True
-        ).stdout.strip()
+        url = subprocess.run(cmd, capture_output=True, text=True, check=True).stdout.strip()
     except (OSError, subprocess.CalledProcessError) as e:
         raise ValueError(f"git remote origin を読めない（--repo owner/repo で渡す）: {e}") from e
     return repo_from_remote_url(url)

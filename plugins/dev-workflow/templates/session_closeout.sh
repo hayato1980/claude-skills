@@ -37,4 +37,4 @@ if [ -z "$plugin_root" ] || [ ! -x "${plugin_root}/scripts/session_closeout.sh" 
   exit 1
 fi
 
-cd "$REPO_ROOT" && exec "${plugin_root}/scripts/session_closeout.sh" "$@"
+SESSION_CLOSEOUT_REPO_ROOT="$REPO_ROOT" exec "${plugin_root}/scripts/session_closeout.sh" "$@"

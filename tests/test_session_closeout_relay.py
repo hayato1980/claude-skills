@@ -50,3 +50,18 @@ def test_relay_runs_the_plugin_script_against_the_calling_repo(tmp_path: Path) -
     assert proc.returncode == 0, proc.stderr
     # git remote origin が acme/widgets なので、別リポ acme/other のセッションは対象外になる。
     assert json.loads(proc.stdout)["excluded"][0]["reason"] == "別リポ（https://github.com/acme/other）のセッション"
+
+
+def test_relay_keeps_cwd_so_relative_result_paths_resolve(tmp_path: Path) -> None:
+    # 呼び出し側の cwd がリポの外でも、相対パスの結果ファイルを読め、対象リポは中継が渡す。
+    repo = _repo(tmp_path)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (elsewhere / "page.json").write_text(json.dumps({"ccr": {"data": [], "has_more": False, "last_id": None}}))
+    env = {**os.environ, "CLAUDE_CONFIG_DIR": str(_cfg(tmp_path, PLUGIN)), "GH_TOKEN": "t"}
+    proc = subprocess.run(
+        [str(repo / "scripts/ci/session_closeout.sh"), "page.json", "--format", "json"],
+        capture_output=True, text=True, env=env, cwd=elsewhere,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert json.loads(proc.stdout)["bundles"] == []

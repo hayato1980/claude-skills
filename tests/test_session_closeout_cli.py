@@ -121,3 +121,19 @@ def test_repo_unreadable_without_remote_fails(
     page = _write(tmp_path, "p", [_row("impl", ["issue-7"])], has_more=False, last_id="impl")
     assert main([str(page)], fetch=_merged) == 1
     assert "--repo owner/repo" in capsys.readouterr().err
+
+
+def test_repo_root_env_selects_the_repo_regardless_of_cwd(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import subprocess
+
+    subprocess.run(["git", "init", "-q", str(tmp_path / "r")], check=True)
+    subprocess.run(["git", "-C", str(tmp_path / "r"), "remote", "add", "origin", "git@github.com:acme/widgets.git"], check=True)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+    monkeypatch.setenv("SESSION_CLOSEOUT_REPO_ROOT", str(tmp_path / "r"))
+    page = _write(tmp_path, "p", [_row("impl", ["issue-7"])], has_more=False, last_id="impl")
+    assert main([str(page)], fetch=_merged) == 0
+    assert "| #7 |" in capsys.readouterr().out
