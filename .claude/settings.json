@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(scripts/ci/ready_wait_merge.sh*)"
+    ]
+  }
+}
