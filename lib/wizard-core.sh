@@ -162,7 +162,9 @@ ask_secret() { _ask ask_secret "$1" "$2" "${3:-}" 1; }
 # 同じ KEY を何度書いても WRITTEN_ENV には 1 回だけ載る。
 write_env() {
   local key="$1" value="$2" tmp
-  touch "$ENV_FILE"
+  # 値に秘密が入りうるので、新規に作るときは所有者だけ読み書きできる 0600 にする
+  # （umask に依らない）。既存のファイルの権限は変えない。
+  [[ -e "$ENV_FILE" ]] || ( umask 077; : > "$ENV_FILE" )
   tmp=$(mktemp)
   K="$key" awk 'BEGIN { k = ENVIRON["K"] "=" } index($0, k) != 1' "$ENV_FILE" > "$tmp" || true
   printf '%s=%s\n' "$key" "$value" >> "$tmp"

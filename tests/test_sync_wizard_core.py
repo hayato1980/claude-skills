@@ -127,3 +127,27 @@ def test_update_marks_local_source_with_a_valid_looking_sha(tmp_path):
     dest = make_consumer(tmp_path)
     second = (dest / "wizard-core.sh").read_text().splitlines()[1]
     assert __import__("re").search(r"@[0-9a-f]{40} ", second)
+
+
+def test_network_fetches_retry_transient_failures(tmp_path):
+    """curl には再試行を付ける（一時的な 5xx で CI を赤にしない）。curl をスタブにして引数を見る。"""
+    dest = make_consumer(tmp_path)
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    log = tmp_path / "curl.log"
+    stub = bindir / "curl"
+    stub.write_text(
+        '#!/usr/bin/env bash\n'
+        'echo "$*" >> "$CURL_LOG"\n'
+        'out=""; while [ $# -gt 0 ]; do [ "$1" = -o ] && out="$2"; shift; done\n'
+        '[ -n "$out" ] && : > "$out"\n'
+        'exit 22\n'
+    )
+    stub.chmod(0o755)
+    env = {**os.environ, "PATH": f"{bindir}:{os.environ['PATH']}", "CURL_LOG": str(log)}
+    env.pop("WIZARD_CORE_SOURCE_DIR", None)
+    subprocess.run(["bash", str(dest / "sync-wizard-core.sh"), "check"], env=env,
+                   capture_output=True, text=True)
+    calls = log.read_text().splitlines()
+    assert calls, "curl が呼ばれていない"
+    assert all("--retry" in c and "--retry-connrefused" in c for c in calls), calls

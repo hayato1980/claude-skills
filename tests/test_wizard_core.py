@@ -229,3 +229,18 @@ def test_total_stages_set_before_source_is_respected():
     prog = f'TOTAL_STAGES=7\n. "{CORE}"\nstage x'
     r = subprocess.run(["bash", "-c", prog], capture_output=True, text=True)
     assert "Stage 1/7" in r.stdout
+
+
+def test_write_env_creates_new_file_with_owner_only_mode(tmp_path):
+    # 値に秘密が入りうるので、新規に作る ENV_FILE は 0600 のまま（umask に依らない）。
+    prog = f'umask 022\n. "{CORE}"\nwrite_env K v'
+    subprocess.run(["bash", "-c", prog], check=True, capture_output=True, cwd=tmp_path)
+    assert stat.S_IMODE(os.stat(tmp_path / ".env").st_mode) == 0o600
+
+
+def test_write_env_keeps_existing_file_mode_when_rewriting(tmp_path):
+    f = tmp_path / ".env"
+    f.write_text("A=1\n")
+    f.chmod(0o640)
+    run("write_env A 2", cwd=tmp_path)
+    assert stat.S_IMODE(os.stat(f).st_mode) == 0o640

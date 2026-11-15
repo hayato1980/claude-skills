@@ -28,6 +28,9 @@ DEST_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # ネットワークの check では解決できない。
 LOCAL_SHA="0000000000000000000000000000000000000000"
 
+# 一時的な失敗（5xx・接続拒否）では再試行する。CI が 1 回の揺らぎで赤くならないように。
+CURL_OPTS=(-fsSL --retry 8 --retry-max-time 180 --retry-connrefused)
+
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -37,7 +40,7 @@ fetch() {
   if [[ -n "${WIZARD_CORE_SOURCE_DIR:-}" ]]; then
     cat "$WIZARD_CORE_SOURCE_DIR/$file" > "$out"
   else
-    curl -fsSL "https://raw.githubusercontent.com/$REPO/$sha/lib/$file" -o "$out"
+    curl "${CURL_OPTS[@]}" "https://raw.githubusercontent.com/$REPO/$sha/lib/$file" -o "$out"
   fi
 }
 
@@ -83,7 +86,7 @@ cmd_update() {
     sha="$LOCAL_SHA"
     echo "warning: ローカルの共有版から作りました。印の sha はダミーで、ネットワークの check では解決できません。" >&2
   else
-    sha="$(curl -fsSL -H 'Accept: application/vnd.github.sha' \
+    sha="$(curl "${CURL_OPTS[@]}" -H 'Accept: application/vnd.github.sha' \
       "https://api.github.com/repos/$REPO/commits/$ref")"
   fi
   if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]]; then
