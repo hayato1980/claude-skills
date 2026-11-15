@@ -66,7 +66,7 @@ def test_issue_inventory_carries_its_own_write_permissions() -> None:
 
 def test_scripts_are_executable_and_shellcheck_clean() -> None:
     targets = [*SCRIPTS.glob("*.sh"), *(PLUGIN / "hooks").glob("*.sh"), *TEMPLATES.glob("*.sh")]
-    assert len(targets) == 8
+    assert len(targets) == 9
     for t in targets:
         assert os.access(t, os.X_OK), t
         assert subprocess.run(["bash", "-n", str(t)], check=False).returncode == 0, t
@@ -115,6 +115,6 @@ def test_agent_contract_headings_are_documented() -> None:
     readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
     for heading in [
         "## オーナーマージの基準表", "## CI が走る条件", "## push 前に流すコマンド", "## CI で止めるジョブ",
-        "## 払い出しを止めるラベル", "## タグの決め方", "## モデル表に足す行", "## source_url", "## /implement",
+        "## 払い出しを止めるラベル", "## タグの決め方", "## モデル表に足す行", "## source_url", "## /implement", "## 更新するプラグイン",
     ]:
         assert heading in readme, heading

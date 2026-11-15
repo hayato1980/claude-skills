@@ -1,0 +1,45 @@
+name: draft-return-comment
+description: 赤い PR を draft に戻した結果を表にして PR へコメントする（本文は draft 化の成否に連動する）
+inputs:
+  draft-result:
+    description: draft 化ステップの outcome（success / failure / skipped）
+    required: true
+  job-name:
+    description: 落ちたジョブの名前（任意。複数ジョブなら空にして checks だけで一覧を渡す）
+    default: ""
+  job-result:
+    description: 落ちたジョブの結果
+    default: ""
+  checks:
+    description: 検査ごとの結果。`名前=結果` を 1 行 1 件
+    default: ""
+  note:
+    description: 成否によらず末尾に足す文
+    default: ""
+  retry-note:
+    description: 戻せたときだけ書く復帰手順（空なら既定の案内）
+    default: ""
+  token:
+    description: "コメントを書くトークン（pull-requests: write 権限）"
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Post the comment
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        GH_REPO: ${{ github.repository }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        ACTION_PATH: ${{ github.action_path }}
+        DRAFT_RESULT: ${{ inputs.draft-result }}
+        JOB_NAME: ${{ inputs.job-name }}
+        JOB_RESULT: ${{ inputs.job-result }}
+        CHECKS: ${{ inputs.checks }}
+        NOTE: ${{ inputs.note }}
+        RETRY_NOTE: ${{ inputs.retry-note }}
+        RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      run: |
+        body="$RUNNER_TEMP/draft-return-comment.md"
+        bash "$ACTION_PATH/draft_return_comment.sh" > "$body"
+        gh pr comment "$PR_NUMBER" --body-file "$body"

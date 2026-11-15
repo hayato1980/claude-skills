@@ -1,0 +1,23 @@
+name: check-agent-headings
+description: 共有スキルが読む docs/agents/*.md の見出しが、呼び出し側のリポにあるかを確かめる（呼び出し側で checkout 済みであること）
+inputs:
+  root:
+    description: 呼び出し側リポの作業ディレクトリ
+    default: "."
+  ignore:
+    description: 検査から外す docs/agents/ 配下のファイル（空白区切り。そのスキルを使っていないリポ用）
+    default: ""
+runs:
+  using: composite
+  steps:
+    - name: Check docs/agents headings
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        ROOT: ${{ inputs.root }}
+        IGNORE: ${{ inputs.ignore }}
+      run: |
+        # IGNORE の分割は python 側で行う（シェルで展開すると glob がカレントに対して展開される）。
+        python3 "$ACTION_PATH/check_agent_headings.py" \
+          --spec "$ACTION_PATH/../../../plugins/dev-workflow/agent-headings.json" \
+          --root "$ROOT" --ignore-list "$IGNORE"
