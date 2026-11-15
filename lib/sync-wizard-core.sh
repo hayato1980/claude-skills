@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # lib/sync-wizard-core.sh — 共有版 wizard-core.sh の写しを同期する／ずれを検出する。
 #
+# 実行は `bash <このファイル> ...`（実行権は付けない）。
+#
 # 利用側のリポは、このファイルと wizard-core.sh を同じディレクトリに「写し」として
 # 置く。各写しの 2 行目に、どの共有コミットから写したかを書く:
 #     # synced-from: hayato1980/claude-skills@<コミット SHA> lib/<ファイル名>
@@ -42,21 +44,21 @@ cmd_check() {
   local sha rc=0 f expected
   sha="$(marker_sha)"
   if [[ -z "$sha" ]]; then
-    echo "wizard-core.sh の 2 行目に '# synced-from: $REPO@<sha> ...' がありません。" >&2
+    echo "wizard-core.sh の 2 行目に '# synced-from: ${REPO}@<sha> ...' がありません。" >&2
     exit 1
   fi
   for f in "${FILES[@]}"; do
     if ! expected="$(fetch "$sha" "$f")"; then
-      echo "$f: 共有版を取得できませんでした（$REPO@$sha）。" >&2
+      echo "${f}: 共有版を取得できませんでした（${REPO}@${sha}）。" >&2
       rc=1; continue
     fi
     if ! diff -u <(printf '%s\n' "$expected") <(strip_marker "$DEST_DIR/$f") \
         --label "shared:$f@$sha" --label "copy:$f"; then
-      echo "$f: 写しが共有版（$REPO@$sha）とずれています。" >&2
+      echo "${f}: 写しが共有版（${REPO}@${sha}）とずれています。" >&2
       rc=1
     fi
   done
-  [[ $rc -eq 0 ]] && echo "ok: 写しは $REPO@$sha と一致しています。"
+  [[ $rc -eq 0 ]] && echo "ok: 写しは ${REPO}@${sha} と一致しています。"
   exit "$rc"
 }
 
@@ -76,7 +78,6 @@ cmd_update() {
     } > "$DEST_DIR/$f.tmp"
     mv "$DEST_DIR/$f.tmp" "$DEST_DIR/$f"
   done
-  chmod +x "$DEST_DIR/sync-wizard-core.sh"
   echo "updated: $REPO@$sha"
 }
 
