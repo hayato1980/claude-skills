@@ -32,7 +32,7 @@
   claude plugin install dev-workflow@hayato || true
   ```
 
-  Setup script は環境のスナップショットを作るときにしか走らないので、**ここへの変更はすぐには届かない**（Setup script・許可ホストの変更か、約7日の期限切れでスナップショットが作り直されたとき）。早く届けたいなら、利用側の SessionStart フックで `claude plugin marketplace update hayato` と `claude plugin update dev-workflow@hayato` を走らせる（反映は次の claude プロセスから）。
+  Setup script は環境のスナップショットを作るときにしか走らないので、**このリポジトリへの変更はすぐには届かない**（Setup script・許可ホストの変更か、約7日の期限切れでスナップショットが作り直されたとき）。早く届けたいなら、利用側の SessionStart フックで `claude plugin marketplace update hayato` と `claude plugin update dev-workflow@hayato` を走らせる（反映は次の claude プロセスから）。
 - ローカルは `/plugin marketplace update hayato` で更新する。
 - `plugin.json` に `version` をあえて書かない（書くと版を上げ忘れた変更が配られない。無ければコミット単位で更新される）。
 
