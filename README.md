@@ -9,9 +9,9 @@
 |---|---|
 | `dev-workflow` | プロジェクト非依存の開発ワークフロー（`issue-inventory` ほか、順次移行中） |
 
-## プロジェクトで有効化する
+## 導入する
 
-各プロジェクトの `.claude/settings.json` に追記する（mattpocock/skills と並べて書ける）。
+ユーザー設定（`~/.claude/settings.json`）に追記する（mattpocock/skills と並べて書ける）。
 
 ```jsonc
 {
@@ -24,7 +24,15 @@
 }
 ```
 
-- クラウド（Claude Code on the web）はセッションごとに取り直すので、常に `main` の最新が入る。
+- **リポの `.claude/settings.json` に書くだけでは入らない**（追跡下の設定ではプラグインが有効化されない）。各自のユーザー設定に書くか、下記のクラウド環境の Setup script で入れる。
+- クラウド（Claude Code on the web）は、環境の **Setup script** 欄に次を足す。
+
+  ```bash
+  claude plugin marketplace add hayato1980/claude-skills || true
+  claude plugin install dev-workflow@hayato || true
+  ```
+
+  Setup script は環境のスナップショットを作るときにしか走らないので、**このリポジトリへの変更はすぐには届かない**（Setup script・許可ホストの変更か、約7日の期限切れでスナップショットが作り直されたとき）。早く届けたいなら、利用側の SessionStart フックで `claude plugin marketplace update hayato` と `claude plugin update dev-workflow@hayato` を走らせる（反映は次の claude プロセスから）。
 - ローカルは `/plugin marketplace update hayato` で更新する。
 - `plugin.json` に `version` をあえて書かない（書くと版を上げ忘れた変更が配られない。無ければコミット単位で更新される）。
 
@@ -38,8 +46,8 @@
 
 | ファイル | 中身 |
 |---|---|
-| `docs/agents/issue-tracker.md` | 課題管理先（GitHub の owner/repo、使うツール） |
-| `docs/agents/triage-labels.md` | triage ラベルの対応表 |
+| `docs/agents/issue-tracker.md` | 課題管理先（GitHub の owner/repo、使うツール）、tracker に書くコメントの署名・定型 |
+| `docs/agents/triage-labels.md` | triage ラベルの対応表。`issue-inventory` が読む、棚卸しで除外するラベル・子セッションへ払い出せないラベル・評価の補正 |
 
 無ければ、スキルは `git remote -v` などから推測するか、ユーザーに聞いて止まる。
 
