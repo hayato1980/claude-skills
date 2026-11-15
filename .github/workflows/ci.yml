@@ -2,6 +2,8 @@ name: ci
 
 on:
   pull_request:
+    # ready_for_review: ready_wait_merge.sh は draft → ready の後に走る run を待つ（docs/agents/review-dialogue.md「CI が走る条件」）
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [main]
 
