@@ -7,7 +7,7 @@
 
 | プラグイン | 中身 |
 |---|---|
-| `dev-workflow` | プロジェクト非依存の開発ワークフロー。スキル 4 本（`issue-inventory` / `review-dialogue` / `create-ccw-session` / `ready-merge`）と hook 2 本（`tdd-review-dispatch` / `deny-mattpocock-implement`）、マージゲートのスクリプト（`ready_wait_merge.sh` / `judge_gate_checks.sh`） |
+| `dev-workflow` | プロジェクト非依存の開発ワークフロー。スキル 5 本（`issue-inventory` / `review-dialogue` / `create-ccw-session` / `ready-merge` / `session-closeout`）と hook 2 本（`tdd-review-dispatch` / `deny-mattpocock-implement`）、マージゲートのスクリプト（`ready_wait_merge.sh` / `judge_gate_checks.sh`） |
 
 ## 導入する
 
@@ -60,6 +60,7 @@
 `scripts/ci/ready_wait_merge.sh` を、プラグインの [`templates/ready_wait_merge.sh`](./plugins/dev-workflow/templates/ready_wait_merge.sh) のままコピーして置く（実行権限つき）。
 プラグイン本体の場所を `~/.claude/plugins/installed_plugins.json` から探して呼ぶだけで、ロジックは持たない。
 許可ルール `Bash(scripts/ci/ready_wait_merge.sh*)` が固定のパスを指す必要があるため、中継を残している。
+`session-closeout` も同じ形で、[`templates/session_closeout.sh`](./plugins/dev-workflow/templates/session_closeout.sh) を `scripts/ci/session_closeout.sh` に置き、許可ルール `Bash(scripts/ci/session_closeout.sh*)` を足す。対象リポは `git remote origin` から読む（設定ファイルは要らない）。
 許可ルールは `bash` を前置しない形で書く（auto mode では `bash …*` の許可ルールが無効になる）。
 
 無ければ、スキルは `git remote -v` などから推測するか、ユーザーに聞いて止まる。

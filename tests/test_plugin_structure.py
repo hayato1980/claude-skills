@@ -12,7 +12,7 @@ import pytest
 
 from conftest import PLUGIN, REPO_ROOT, SCRIPTS, TEMPLATES
 
-SKILLS = ["issue-inventory", "review-dialogue", "create-ccw-session", "ready-merge"]
+SKILLS = ["issue-inventory", "review-dialogue", "create-ccw-session", "ready-merge", "session-closeout"]
 FRONTMATTER = re.compile(r"\A---\n(.*?)\n---\n", re.S)
 
 # 非公開リポの名前・ホスト名・業務ドメインの語。正規表現の文字クラスで組み、このファイル自身に
@@ -66,7 +66,7 @@ def test_issue_inventory_carries_its_own_write_permissions() -> None:
 
 def test_scripts_are_executable_and_shellcheck_clean() -> None:
     targets = [*SCRIPTS.glob("*.sh"), *(PLUGIN / "hooks").glob("*.sh"), *TEMPLATES.glob("*.sh")]
-    assert len(targets) == 6
+    assert len(targets) == 8
     for t in targets:
         assert os.access(t, os.X_OK), t
         assert subprocess.run(["bash", "-n", str(t)], check=False).returncode == 0, t
