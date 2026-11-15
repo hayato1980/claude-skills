@@ -28,7 +28,7 @@ jobs:
       - name: No private names (public repository)
         run: |
           # 文字クラスで組んであり、このステップ自身にはヒットしない。
-          if git grep -niE '[k]eiba|[p]ckeiba|[j]rvltsql|[t]erraform|[a]urora'; then
+          if git grep -nIiE '[k]eiba|[j]rvltsql|[t]erraform|[a]urora'; then
             echo "公開リポに載せてはいけない語が含まれています" >&2
             exit 1
           fi
