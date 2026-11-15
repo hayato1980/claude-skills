@@ -1,0 +1,100 @@
+# 赤い PR を draft に戻し、落ちたジョブの一覧を表にして PR へコメントする（再利用ワークフロー）。
+#
+# 呼び出し側の例:
+#
+#   on-failure:
+#     needs: [gate]
+#     if: ${{ failure() && github.event_name == 'pull_request' }}
+#     permissions:
+#       pull-requests: write
+#     uses: <owner>/<this-repo>/.github/workflows/return-to-draft.yml@main
+#     with:
+#       job-name: gate
+#       job-result: ${{ needs.gate.result }}
+#       checks: |
+#         lint=${{ needs.gate.outputs.lint }}
+#         test=${{ needs.gate.outputs.test }}
+#     secrets:
+#       draft_token: ${{ secrets.MY_DRAFT_TOKEN }}
+#
+# ⚠️ `secrets` は必要なものを名指しで渡す（一括で引き継ぐ書き方はしない。このリポは公開で、
+# 呼び出し側は非公開のことがある）。
+# ⚠️ GitHub 標準のトークンでは PR を draft に戻せない（権限を足しても FORBIDDEN）。戻すには
+# PR を draft 化できる PAT / GitHub App のトークンを `draft_token` に渡す。未登録なら戻す操作は
+# せず、コメントに「戻せていない」と書いてジョブを赤にする。
+# ⚠️ 呼び出し側のジョブに `pull-requests: write` が要る（呼ばれる側は権限を増やせない）。
+name: return-to-draft
+
+on:
+  workflow_call:
+    inputs:
+      job-name:
+        description: 落ちたジョブの名前（コメントの表の見出しに出す）
+        type: string
+        required: true
+      job-result:
+        description: そのジョブの結果（needs.<job>.result）
+        type: string
+        default: ""
+      checks:
+        description: 検査ごとの結果。`名前=結果` を 1 行 1 件（結果が空なら「実行されていない」と書く）
+        type: string
+        default: ""
+      note:
+        description: 成否によらずコメントの末尾に足す文（手元での再現方法など）
+        type: string
+        default: ""
+      retry-note:
+        description: draft に戻せたときだけ書く復帰手順（空なら既定の案内）
+        type: string
+        default: ""
+    secrets:
+      draft_token:
+        description: PR を draft 化できるトークン
+        required: false
+
+jobs:
+  return-to-draft:
+    # slim は上限超の timeout-minutes を黙って打ち切る。上限（15 分）以内に固定する。
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write
+    env:
+      # secrets は step の if から読めない（workflow file 自体が invalid になる）。
+      # 有無だけを job の env に落とし、step 側はそれを見る。
+      HAS_TOKEN: ${{ secrets.draft_token != '' }}
+    steps:
+      # convertPullRequestToDraft は GraphQL にしか無い。失敗してもコメントは出したいので止めない
+      # （赤にするのは末尾のステップ）。
+      - name: Convert PR back to draft
+        id: convert
+        if: ${{ env.HAS_TOKEN == 'true' }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.draft_token }}
+          NODE_ID: ${{ github.event.pull_request.node_id }}
+        run: |
+          gh api graphql \
+            -f query='mutation($id: ID!) { convertPullRequestToDraft(input: {pullRequestId: $id}) { pullRequest { number isDraft } } }' \
+            -f id="$NODE_ID"
+
+      # コメントは標準のトークンで足りる。PAT は渡さない（露出面を最小に保つ）。
+      - name: Comment the reason
+        if: always()
+        uses: hayato1980/claude-skills/.github/actions/draft-return-comment@main
+        with:
+          draft-result: ${{ steps.convert.outcome }}
+          job-name: ${{ inputs.job-name }}
+          job-result: ${{ inputs.job-result }}
+          checks: ${{ inputs.checks }}
+          note: ${{ inputs.note }}
+          retry-note: ${{ inputs.retry-note }}
+          token: ${{ github.token }}
+
+      # 戻せないまま緑にすると、run 一覧から素通りが見えなくなる。
+      - name: Fail if the PR was not converted to draft
+        if: ${{ steps.convert.outcome != 'success' }}
+        run: |
+          echo "::error::PR を draft に戻せませんでした。この PR は ready のままマージできます。draft_token の登録と権限を確認してください。"
+          exit 1
