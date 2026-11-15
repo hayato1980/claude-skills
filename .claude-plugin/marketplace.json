@@ -1,0 +1,14 @@
+{
+  "name": "hayato",
+  "owner": { "name": "hayato1980" },
+  "metadata": {
+    "description": "複数プロジェクトで共有する開発ワークフロー系スキル"
+  },
+  "plugins": [
+    {
+      "name": "dev-workflow",
+      "source": "./plugins/dev-workflow",
+      "description": "issue 棚卸し・セッション払い出し・レビュー往復など、プロジェクト非依存の開発ワークフロー"
+    }
+  ]
+}
