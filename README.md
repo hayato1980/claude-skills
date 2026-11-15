@@ -9,7 +9,7 @@
 |---|---|
 | `dev-workflow` | プロジェクト非依存の開発ワークフロー（`issue-inventory` ほか、順次移行中） |
 
-## プロジェクトで有効化する
+## 導入する
 
 ユーザー設定（`~/.claude/settings.json`）に追記する（mattpocock/skills と並べて書ける）。
 
@@ -46,8 +46,8 @@
 
 | ファイル | 中身 |
 |---|---|
-| `docs/agents/issue-tracker.md` | 課題管理先（GitHub の owner/repo、使うツール） |
-| `docs/agents/triage-labels.md` | triage ラベルの対応表 |
+| `docs/agents/issue-tracker.md` | 課題管理先（GitHub の owner/repo、使うツール）、tracker に書くコメントの署名・定型 |
+| `docs/agents/triage-labels.md` | triage ラベルの対応表。`issue-inventory` が読む、棚卸しで除外するラベル・子セッションへ払い出せないラベル・評価の補正 |
 
 無ければ、スキルは `git remote -v` などから推測するか、ユーザーに聞いて止まる。
 

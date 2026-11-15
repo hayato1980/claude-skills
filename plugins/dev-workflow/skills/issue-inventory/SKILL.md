@@ -1,7 +1,7 @@
 ---
 name: issue-inventory
 description: "open な issue を全件見渡し、緊急度×重要度で評価して「次に着手すべき 3〜5 件」と「片付けの提案（見送り・重複・クローズ）」を 1 回で出す。台帳は作らず、判断は issue 自身にラベルとコメントで残す。「issue を棚卸して」「次に何を着手すべきか」「open issue を整理したい」「次に払い出す issue を選びたい」で発動。"
-allowed-tools: mcp__github__list_issues, mcp__github__search_issues, mcp__github__issue_read, mcp__github__get_label
+allowed-tools: mcp__github__list_issues, mcp__github__search_issues, mcp__github__issue_read, mcp__github__get_label, Bash(gh issue list:*), Bash(gh issue view:*), Bash(gh search issues:*), Bash(gh label list:*)
 ---
 
 Use this skill when: open な issue が多く溜まり、どれから着手すべきかが一目で分からなくなったとき。判断は人が下す前提で、このスキルは**材料を揃えて提案するだけ**。
@@ -21,16 +21,20 @@ Use this skill when: open な issue が多く溜まり、どれから着手す�
 
 ### 1. tracker を決める
 
-対象リポジトリに `docs/agents/issue-tracker.md` があればそれに従う。無ければ `git remote -v` と、そのリモートに対応する操作手段が使えるか確認する。GitHub なら `command -v gh` で `gh` CLI の有無を見て、あれば `gh`、無ければ GitHub MCP ツール（`mcp__github__*`）を使う（クラウドの実行環境には `gh` が無いことが多い）。どちらも判定できなければユーザーに tracker を聞いて停止する（推測で進めない）。
+**tracker（どのリポジトリの課題か）**: 対象リポジトリに `docs/agents/issue-tracker.md` があればそれに従う。無ければ `git remote -v` から決める。どちらからも決まらなければユーザーに tracker を聞いて停止する（推測で進めない）。
+
+**操作手段（GitHub の場合）**: `issue-tracker.md` の有無や記述に関係なく、実行環境で決める。`command -v gh` で `gh` CLI があれば `gh`、無ければ GitHub MCP ツール（`mcp__github__*`）を使う（クラウドの実行環境には `gh` が無いことが多い）。どちらも使えなければユーザーに伝えて停止する。以降の手順の「ラベル取得操作」などは、ここで決めた手段で行う。
 
 対象リポジトリに `docs/agents/triage-labels.md` があれば、ここで一緒に読む。手順 3・4・7 の**リポジトリ固有の扱い**（棚卸しで除外するラベル、払い出せないラベル、評価の補正）はそこに書かれている。
 
 ### 2. ラベルの存在を確認する
 
-`deferred` と `duplicate` を、tracker のラベル取得操作（GitHub なら `mcp__github__get_label` / `gh label list`）で確認する。
+`deferred` と `duplicate` を、tracker のラベル取得操作で確認する。
 
 - 両方あれば通常モードで進む。
-- `deferred` が無ければ「ラベル無しモード」に落ちる。ラベル作成ツールは MCP に無いため、**MCP しか使えない環境ではこのスキルが自分で作ることはできない**。出力の末尾に「`deferred` ラベルが無いため見送り判断はラベルに残せません。オーナーに作成を依頼してください」と 1 行添えて続行する（停止しない）。`gh` が使える環境なら `gh label create deferred` を提案してよい。
+- `deferred` が無ければ「ラベル無しモード」に落ちる。今回の棚卸しはラベル無しモードのまま最後まで進める（停止しない）。
+  - 手順 1 で決めた操作手段にラベル作成の手段がある（`gh` が使える、またはこのセッションの MCP にラベル作成ツールがある）なら、`deferred` の作成を手順 7 の書き込み提案に含める（承認後に実行する。ここでは作らない）。
+  - 無ければ、出力の末尾に「`deferred` ラベルが無いため見送り判断はラベルに残せません。オーナーに作成を依頼してください」と 1 行添える。
 - `duplicate` が無い場合も同様に 1 行案内して続行する（GitHub ではデフォルトで存在するため、通常は起きない）。
 
 ### 3. open 全件を浅く取る
@@ -82,7 +86,7 @@ Use this skill when: open な issue が多く溜まり、どれから着手す�
 
 ### 7. 出力する
 
-次の 2 セクションで出力し、**まとめて 1 回**ユーザーに承認を求める。承認されたぶんだけ、tracker への書き込み（ラベル変更・コメント・クローズ）を実行する。承認前に書き込みをしない。tracker へ書くコメントの署名・定型（attribution footer 等）は `docs/agents/issue-tracker.md` に従う。
+次の 2 セクションで出力し、**まとめて 1 回**ユーザーに承認を求める。承認されたぶんだけ、tracker への書き込み（ラベル変更・コメント・クローズ）を実行する。承認前に書き込みをしない。tracker へ書くコメントの署名・定型（attribution footer 等）は `docs/agents/issue-tracker.md` に従い、無ければ実行環境の既定の署名に従う。
 
 ```
 ## 1. 次の候補（3〜5 件）
@@ -106,4 +110,4 @@ Use this skill when: open な issue が多く溜まり、どれから着手す�
 - **見送りは `deferred` ラベル（自動復活しない）。** コメントのみだと手順 3 の浅い舐めでは見えず、次回また同じ issue を候補に挙げてしまう。`wontfix` は「対応しない」であり「今はやらない」より強く意味が違うため流用しない。N 日での自動復活もしない（見送った理由が解決していないのに戻ってきて、また見送るだけになる）。
 - **優先度ラベル（`P0`〜`P2` 等）は導入しない。** 緊急度は時間とともに変わる（例: CI が直れば緊急度は消える）ため、固定ラベルは同じように腐る。毎回その場で評価する。
 - **払い出しは繋がない。** 打てる形のコマンド行を添えるだけで、内部から `/create-ccw-session` を呼ばない。承認が 2 種類になるうえ、誤った払い出しは後始末（`archive_session` 等）が要る。
-- **repo 非依存。** tracker もラベルも実行時に発見し、無ければ劣化して動く（ラベル無しモードなど）。このスキル本文は特定の issue 番号や `[meta]` のような命名規約に依存しない。共有プラグイン `dev-workflow` として配るので、各 repo はコピーせず `.claude/settings.json` で有効化するだけでよい。
+- **repo 非依存。** tracker もラベルも実行時に発見し、無ければ劣化して動く（ラベル無しモードなど）。このスキル本文は特定の issue 番号や `[meta]` のような命名規約に依存しない。共有プラグイン `dev-workflow` として配るので、各 repo はコピーしない。導入はユーザー設定か、クラウド環境の Setup script で行う（リポの `.claude/settings.json` では有効化されない。配布元の README を参照）。
