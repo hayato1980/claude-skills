@@ -7,5 +7,5 @@
 | [0001](./0001-review-runs-in-a-separate-session-and-model.md) | レビューは実装と別セッション・別モデルで行う |
 | [0002](./0002-review-rounds-wake-the-counterpart-directly.md) | レビュー往復の起床は相手を直接起こし、ポーリングは保証として残す |
 | [0003](./0003-findings-land-through-a-wrapper-skill.md) | 指摘は、上流 code-review を包むスキル経由で 1 件 1 スレッドに着地させる |
-| [0004](./0004-merge-gate-calls-the-github-api-directly.md) | マージゲートは GitHub API を直接叩く |
+| [0004](./0004-merge-gate-calls-the-github-api-directly.md) | マージゲートは GitHub API を直接叩く（`session-closeout` の読み取りも同じ方式） |
 | [0005](./0005-model-follows-whether-errors-surface-immediately.md) | 払い出しのモデルは「誤りが即座に可視化されるか」で選ぶ |
