@@ -3,10 +3,14 @@
 綴りの grep ではなく、標準入力を与えて出力と戻り値を観測する。端末ではない
 （パイプ）状態で走らせるので、色と画面クリアは出ない。
 """
+import os
+import stat
 import subprocess
 from pathlib import Path
 
-CORE = Path(__file__).resolve().parent.parent / "lib" / "wizard-core.sh"
+from conftest import LIB
+
+CORE = LIB / "wizard-core.sh"
 
 
 def run(script: str, stdin: str = "", cwd: Path | None = None):
@@ -155,3 +159,73 @@ def test_core_does_not_change_caller_shell_options():
     prog = f'set +e +u\n. "{CORE}"\n[[ $- != *e* && $- != *u* ]] && echo UNCHANGED'
     r = subprocess.run(["bash", "-c", prog], capture_output=True, text=True)
     assert "UNCHANGED" in r.stdout
+
+
+# ── レビュー指摘の回帰（R1）──────────────────────────────────────────────
+
+def test_write_env_same_key_twice_is_counted_once_in_finish(tmp_path):
+    r = run('write_env A 1; write_env A 2; write_env B 3; finish', cwd=tmp_path)
+    assert "wrote 2 value(s)" in r.stdout
+    assert "A B" in r.stdout and "A A" not in r.stdout
+
+
+def test_write_env_key_is_matched_literally_not_as_regex(tmp_path):
+    (tmp_path / ".env").write_text("AXB=keep\nA.B=old\n")
+    run('write_env A.B new', cwd=tmp_path)
+    lines = (tmp_path / ".env").read_text().splitlines()
+    assert "AXB=keep" in lines
+    assert lines.count("A.B=new") == 1 and "A.B=old" not in lines
+
+
+def test_existing_value_lookup_is_literal_too(tmp_path):
+    (tmp_path / ".env").write_text("AXB=wrong\nA.B=right\n")
+    r = run('_existing A.B', cwd=tmp_path)
+    assert r.stdout == "right"
+    (tmp_path / ".env").write_text("AXB=wrong\n")
+    assert run('_existing A.B', cwd=tmp_path).returncode != 0
+
+
+def test_write_env_keeps_file_mode_and_symlink(tmp_path):
+    real = tmp_path / "real.env"
+    real.write_text("A=1\n")
+    real.chmod(0o644)
+    (tmp_path / ".env").symlink_to(real)
+    run('write_env A 2', cwd=tmp_path)
+    assert (tmp_path / ".env").is_symlink()
+    assert real.read_text() == "A=2\n"
+    assert stat.S_IMODE(os.stat(real).st_mode) == 0o644
+
+
+def test_finish_does_not_fail_when_last_skipped_note_is_empty():
+    r = run('skipped_note a; skipped_note ""; finish')
+    assert r.returncode == 0
+    assert "- a" in r.stdout
+
+
+def test_open_url_warns_when_no_opener_exists(tmp_path):
+    # 開く手段が PATH に 1 つも無い（bash は絶対パスで起動）。
+    prog = f'set -euo pipefail\n. "{CORE}"\nopen_url "http://example.test/x"'
+    r = subprocess.run(["/bin/bash", "-c", prog], capture_output=True, text=True,
+                       env={"PATH": str(tmp_path)})
+    assert "visit it manually" in r.stdout
+    assert "http://example.test/x" in r.stdout
+
+
+def test_ask_accepts_last_line_without_trailing_newline():
+    r = subprocess.run(["bash", "-c", f'set -euo pipefail\n. "{CORE}"\nask K p; echo "got=$K"'],
+                       input="abc", capture_output=True, text=True)
+    assert r.returncode == 0
+    assert "got=abc" in r.stdout
+
+
+def test_ask_secret_accepts_last_line_without_trailing_newline():
+    r = subprocess.run(["bash", "-c", f'set -euo pipefail\n. "{CORE}"\nask_secret K p; echo "got=$K"'],
+                       input="abc", capture_output=True, text=True)
+    assert r.returncode == 0
+    assert "got=abc" in r.stdout
+
+
+def test_total_stages_set_before_source_is_respected():
+    prog = f'TOTAL_STAGES=7\n. "{CORE}"\nstage x'
+    r = subprocess.run(["bash", "-c", prog], capture_output=True, text=True)
+    assert "Stage 1/7" in r.stdout

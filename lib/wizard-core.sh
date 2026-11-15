@@ -8,9 +8,8 @@
 #     . "$(dirname "${BASH_SOURCE[0]}")/wizard-core.sh"
 #     TOTAL_STAGES=<段の数>
 #
-# **TOTAL_STAGES は source より後で設定すること。** source 時に 0 を書き込むため、
-# 先に書くと上書きされる。ENV_FILE は source の前後どちらでもよい（既存の値を
-# 尊重し、無ければ `.env`）。
+# TOTAL_STAGES と ENV_FILE は source の前後どちらで設定してもよい（既存の値を尊重し、
+# 無ければそれぞれ 0 と `.env`）。
 #
 # **set はここで触らない。** source されるので、呼び出し側のシェルオプションを
 # 書き換えることになる。オプションは呼び出し側が宣言する。
@@ -31,7 +30,7 @@ else
 fi
 
 # 呼び出し側が段の数を宣言する。
-TOTAL_STAGES=0
+TOTAL_STAGES="${TOTAL_STAGES:-0}"
 
 _STAGE_INDEX=0
 ENV_FILE="${ENV_FILE:-.env}"
@@ -82,6 +81,7 @@ warn() { printf '  %s⚠ %s%s\n' "$YELLOW" "$1" "$RESET"; }
 abort() { printf '\n  %s✗ %s%s\n\n' "$RED" "$1" "$RESET" >&2; exit 1; }
 
 # open_url URL opens it in the human's browser, cross-platform incl. WSL.
+# 開く手段が無い／失敗したときの警告は 1 本（リダイレクトの外）にまとめる。
 open_url() {
   local url="$1"
   printf '  %s↗ opening%s %s\n' "$GREEN" "$RESET" "$url"
@@ -89,7 +89,7 @@ open_url() {
     elif command -v explorer.exe >/dev/null 2>&1; then explorer.exe "$url"
     elif command -v xdg-open    >/dev/null 2>&1; then xdg-open "$url"
     elif command -v open        >/dev/null 2>&1; then open "$url"
-    else warn "couldn't open a browser; visit it manually: $url"; fi
+    else false; fi
   } >/dev/null 2>&1 || warn "couldn't open a browser, so visit it manually: $url"
 }
 
@@ -107,11 +107,39 @@ confirm() {
   [[ "$reply" =~ ^[Yy] ]]
 }
 
-# _existing KEY: current value of KEY in ENV_FILE, if any.
+# _existing KEY: current value of KEY in ENV_FILE, if any. KEY は固定文字列として照合する
+# （正規表現ではない）。最後に現れた行の値を返し、無ければ失敗する。
 _existing() {
   [[ -f "$ENV_FILE" ]] || return 1
-  local line; line=$(grep -E "^${1}=" "$ENV_FILE" | tail -n1) || return 1
-  printf '%s' "${line#*=}"
+  K="$1" awk 'BEGIN { k = ENVIRON["K"] "="; n = length(k) }
+    index($0, k) == 1 { v = substr($0, n + 1); f = 1 }
+    END { if (!f) exit 1; printf "%s", v }' "$ENV_FILE"
+}
+
+# _ask FN KEY PROMPT MODE HIDDEN は ask / ask_secret の本体（HIDDEN=1 で入力を隠す）。
+_ask() {
+  local fn="$1" key="$2" prompt="$3" mode="$4" hidden="$5" current="" input=""
+  if [ -n "$mode" ] && [ "$mode" != "--no-remember" ]; then
+    abort "${fn} ${key}: 未知のオプションです: ${mode}（綴りを確認してください）。"
+  fi
+  if [[ "$mode" != "--no-remember" ]]; then
+    current=$(_existing "$key" || true)
+  fi
+  if [[ -n "$current" ]]; then
+    printf '  %s%s%s %s[Enter keeps current]%s ' "$BOLD" "$prompt" "$RESET" "$DIM" "$RESET"
+  else
+    printf '  %s%s%s ' "$BOLD" "$prompt" "$RESET"
+  fi
+  # 改行の無い最後の行は read が値を入れたまま 1 を返す。値があるなら EOF とはみなさない。
+  # 値が空のまま尽きたときだけ abort する。
+  if [[ "$hidden" == 1 ]]; then
+    read -rs input || [[ -n "$input" ]] || abort "入力が読めませんでした（対話端末で実行してください）。"
+    printf '\n'
+  else
+    read -r input || [[ -n "$input" ]] || abort "入力が読めませんでした（対話端末で実行してください）。"
+  fi
+  [[ -z "$input" && -n "$current" ]] && input="$current"
+  printf -v "$key" '%s' "$input"
 }
 
 # ask KEY "Prompt" [--no-remember] reads a value into $KEY. Offers the existing
@@ -123,56 +151,27 @@ _existing() {
 #
 # **入力が尽きたら（EOF）その場で abort する。** 握り潰すと、呼び手が while で
 # 再入力させている場合に無限ループして CPU を焼く（非対話実行や Ctrl-D）。
-ask() {
-  local key="$1" prompt="$2" current="" mode="${3:-}"
-  local input
-  if [ -n "$mode" ] && [ "$mode" != "--no-remember" ]; then
-    abort "ask ${key}: 未知のオプションです: ${mode}（綴りを確認してください）。"
-  fi
-  if [[ "$mode" != "--no-remember" ]]; then
-    current=$(_existing "$key" || true)
-  fi
-  if [[ -n "$current" ]]; then
-    printf '  %s%s%s %s[Enter keeps current]%s ' "$BOLD" "$prompt" "$RESET" "$DIM" "$RESET"
-  else
-    printf '  %s%s%s ' "$BOLD" "$prompt" "$RESET"
-  fi
-  read -r input || abort "入力が読めませんでした（対話端末で実行してください）。"
-  [[ -z "$input" && -n "$current" ]] && input="$current"
-  printf -v "$key" '%s' "$input"
-}
+ask() { _ask ask "$1" "$2" "${3:-}" 0; }
 
 # ask_secret KEY "Prompt" [--no-remember] is like ask, but input is hidden.
-ask_secret() {
-  local key="$1" prompt="$2" current="" mode="${3:-}"
-  local input
-  if [ -n "$mode" ] && [ "$mode" != "--no-remember" ]; then
-    abort "ask_secret ${key}: 未知のオプションです: ${mode}（綴りを確認してください）。"
-  fi
-  if [[ "$mode" != "--no-remember" ]]; then
-    current=$(_existing "$key" || true)
-  fi
-  if [[ -n "$current" ]]; then
-    printf '  %s%s%s %s[Enter keeps current]%s ' "$BOLD" "$prompt" "$RESET" "$DIM" "$RESET"
-  else
-    printf '  %s%s%s ' "$BOLD" "$prompt" "$RESET"
-  fi
-  read -rs input || abort "入力が読めませんでした（対話端末で実行してください）。"
-  printf '\n'
-  [[ -z "$input" && -n "$current" ]] && input="$current"
-  printf -v "$key" '%s' "$input"
-}
+ask_secret() { _ask ask_secret "$1" "$2" "${3:-}" 1; }
 
 # write_env KEY VALUE upserts KEY=VALUE into ENV_FILE (creates it; replaces
-# any existing line). Idempotent.
+# any existing line). Idempotent. KEY は固定文字列として照合する。書き戻しは
+# `cat >` なので、既存ファイルの権限とシンボリックリンクを保つ。
+# 同じ KEY を何度書いても WRITTEN_ENV には 1 回だけ載る。
 write_env() {
   local key="$1" value="$2" tmp
   touch "$ENV_FILE"
   tmp=$(mktemp)
-  grep -vE "^${key}=" "$ENV_FILE" > "$tmp" || true
+  K="$key" awk 'BEGIN { k = ENVIRON["K"] "=" } index($0, k) != 1' "$ENV_FILE" > "$tmp" || true
   printf '%s=%s\n' "$key" "$value" >> "$tmp"
-  mv "$tmp" "$ENV_FILE"
-  WRITTEN_ENV="${WRITTEN_ENV}${WRITTEN_ENV:+ }${key}"
+  cat "$tmp" > "$ENV_FILE"
+  rm -f "$tmp"
+  case " ${WRITTEN_ENV} " in
+    *" ${key} "*) ;;
+    *) WRITTEN_ENV="${WRITTEN_ENV}${WRITTEN_ENV:+ }${key}" ;;
+  esac
   printf '  %s✓ wrote%s %s → %s\n' "$GREEN" "$RESET" "$key" "$ENV_FILE"
 }
 
@@ -191,7 +190,7 @@ finish() {
   if [ -n "${SKIPPED}" ]; then
     printf '\n'; warn "still to do by hand:"
     printf '%s' "${SKIPPED}" | while IFS= read -r s; do
-      [ -n "${s}" ] && note "  - ${s}"
+      if [ -n "${s}" ]; then note "  - ${s}"; fi
     done
   fi
   printf '\n'

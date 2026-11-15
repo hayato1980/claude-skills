@@ -5,7 +5,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-LIB = Path(__file__).resolve().parent.parent / "lib"
+from conftest import LIB
 
 
 def sync(dest: Path, *args: str, source: Path = LIB):
@@ -76,3 +76,54 @@ def test_check_fails_when_shared_source_cannot_be_read(tmp_path):
 def test_unknown_subcommand_is_usage_error(tmp_path):
     dest = make_consumer(tmp_path)
     assert sync(dest, "bogus").returncode == 2
+
+
+def test_check_fails_when_sync_script_marker_sha_differs(tmp_path):
+    dest = make_consumer(tmp_path)
+    s = dest / "sync-wizard-core.sh"
+    lines = s.read_text().splitlines(keepends=True)
+    lines[1] = lines[1].replace("@", "@deadbeef", 1)
+    s.write_text("".join(lines))
+    r = sync(dest, "check")
+    assert r.returncode != 0
+    assert "sync-wizard-core.sh" in r.stderr
+
+
+def test_check_fails_when_marker_filename_is_rewritten(tmp_path):
+    dest = make_consumer(tmp_path)
+    core = dest / "wizard-core.sh"
+    core.write_text(core.read_text().replace(" lib/wizard-core.sh", " lib/other.sh", 1))
+    assert sync(dest, "check").returncode != 0
+
+
+def test_check_detects_trailing_blank_line_changes(tmp_path):
+    dest = make_consumer(tmp_path)
+    core = dest / "wizard-core.sh"
+    core.write_text(core.read_text() + "\n")
+    assert sync(dest, "check").returncode != 0
+
+
+def test_check_passes_when_shared_version_ends_with_blank_line(tmp_path):
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    for n in ("wizard-core.sh", "sync-wizard-core.sh"):
+        (shared / n).write_text((LIB / n).read_text() + "\n")
+    dest = tmp_path / "consumer"
+    dest.mkdir()
+    shutil.copy(LIB / "sync-wizard-core.sh", dest)
+    assert sync(dest, "update", source=shared).returncode == 0
+    assert sync(dest, "check", source=shared).returncode == 0
+
+
+def test_update_leaves_no_temp_files_on_failure(tmp_path):
+    dest = make_consumer(tmp_path)
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    assert sync(dest, "update", source=empty).returncode != 0
+    assert list(dest.glob("*.tmp")) == []
+
+
+def test_update_marks_local_source_with_a_valid_looking_sha(tmp_path):
+    dest = make_consumer(tmp_path)
+    second = (dest / "wizard-core.sh").read_text().splitlines()[1]
+    assert __import__("re").search(r"@[0-9a-f]{40} ", second)
