@@ -1,0 +1,11 @@
+# 判断の記録
+
+`dev-workflow` の手順として今も効いている判断。1 判断 1 ファイル。経緯の細部は書かず、**何を決め、なぜか**だけを残す。
+
+| 番号 | 判断 |
+|---|---|
+| [0001](./0001-review-runs-in-a-separate-session-and-model.md) | レビューは実装と別セッション・別モデルで行う |
+| [0002](./0002-review-rounds-wake-the-counterpart-directly.md) | レビュー往復の起床は相手を直接起こし、ポーリングは保証として残す |
+| [0003](./0003-findings-land-through-a-wrapper-skill.md) | 指摘は、上流 code-review を包むスキル経由で 1 件 1 スレッドに着地させる |
+| [0004](./0004-merge-gate-calls-the-github-api-directly.md) | マージゲートは GitHub API を直接叩く |
+| [0005](./0005-model-follows-whether-errors-surface-immediately.md) | 払い出しのモデルは「誤りが即座に可視化されるか」で選ぶ |

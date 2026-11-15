@@ -7,7 +7,7 @@
 
 | プラグイン | 中身 |
 |---|---|
-| `dev-workflow` | プロジェクト非依存の開発ワークフロー（`issue-inventory` ほか、順次移行中） |
+| `dev-workflow` | プロジェクト非依存の開発ワークフロー。スキル 4 本（`issue-inventory` / `review-dialogue` / `create-ccw-session` / `ready-merge`）と hook 2 本（`tdd-review-dispatch` / `deny-mattpocock-implement`）、マージゲートのスクリプト（`ready_wait_merge.sh` / `judge_gate_checks.sh`） |
 
 ## 導入する
 
@@ -44,15 +44,33 @@
 固有の情報は各プロジェクトの `docs/agents/*.md` に置き、スキルは実行時にそれを読む
 （mattpocock/skills と同じ規約）。
 
-| ファイル | 中身 |
-|---|---|
-| `docs/agents/issue-tracker.md` | 課題管理先（GitHub の owner/repo、使うツール）、tracker に書くコメントの署名・定型 |
-| `docs/agents/triage-labels.md` | triage ラベルの対応表。`issue-inventory` が読む、棚卸しで除外するラベル・子セッションへ払い出せないラベル・評価の補正 |
+スキル 1 つにつき 1 ファイル。**見出しは共有スキルとの契約**で、スキルは実行時にその見出しを読む（見出しを変えると壊れる）。
+
+| ファイル | 読むスキル | 契約する見出しと中身 |
+|---|---|---|
+| `docs/agents/issue-tracker.md` | 全般 | 課題管理先（GitHub の owner/repo、使うツール）、tracker に書くコメントの署名・定型 |
+| `docs/agents/triage-labels.md` | `issue-inventory` | triage ラベルの対応表。棚卸しで除外するラベル・子セッションへ払い出せないラベル・評価の補正 |
+| `docs/agents/review-dialogue.md` | `review-dialogue` | `## オーナーマージの基準表`（基準・当たる・当たらない）／`## CI が走る条件`／`## push 前に流すコマンド` |
+| `docs/agents/pr-merge-gate.md` | `ready-merge`・`ready_wait_merge.sh` | `## CI で止めるジョブ`（`- \`ジョブ名\`` の箇条書き。**無い・空ならマージしない**） |
+| `docs/agents/ccw-dispatch.md` | `create-ccw-session` | `## 払い出しを止めるラベル`／`## タグの決め方`／`## モデル表に足す行`／`## source_url` |
+| `docs/agents/dev-workflow.md` | `deny-mattpocock-implement` hook | `## /implement` の下に `止める: はい`（または `いいえ`）。無ければ止めない |
+
+### 各リポに置く中継スクリプト
+
+`scripts/ci/ready_wait_merge.sh` を、プラグインの [`templates/ready_wait_merge.sh`](./plugins/dev-workflow/templates/ready_wait_merge.sh) のままコピーして置く（実行権限つき）。
+プラグイン本体の場所を `~/.claude/plugins/installed_plugins.json` から探して呼ぶだけで、ロジックは持たない。
+許可ルール `Bash(scripts/ci/ready_wait_merge.sh*)` が固定のパスを指す必要があるため、中継を残している。
+許可ルールは `bash` を前置しない形で書く（auto mode では `bash …*` の許可ルールが無効になる）。
 
 無ければ、スキルは `git remote -v` などから推測するか、ユーザーに聞いて止まる。
+
+## 判断の記録
+
+手順として今も効いている判断は [`docs/decisions/`](./docs/decisions/)。
 
 ## 検証
 
 ```bash
 claude plugin validate .
+python -m pytest tests -q   # jq が必要
 ```
