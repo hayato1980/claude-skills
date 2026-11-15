@@ -1,6 +1,7 @@
 """lib/sync-wizard-core.sh: 写しの作成と、ずれの検出。ネットワークは使わない
 （WIZARD_CORE_SOURCE_DIR に共有版を見立てたディレクトリを渡す）。"""
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -151,3 +152,53 @@ def test_network_fetches_retry_transient_failures(tmp_path):
     calls = log.read_text().splitlines()
     assert calls, "curl が呼ばれていない"
     assert all("--retry" in c and "--retry-connrefused" in c for c in calls), calls
+
+
+def test_script_dir_resolution_ignores_cdpath(tmp_path):
+    """`cd` は CDPATH を見て別の場所へ飛びうる。相対パスで呼んでも、自分の隣の写しを読むこと。"""
+    dest = make_consumer(tmp_path)
+    root = dest.parents[1]
+    decoy = tmp_path / "decoy"
+    (decoy / "scripts" / "lib").mkdir(parents=True)  # CDPATH 経由だと、ここへ飛ぶ
+    env = {**os.environ, "WIZARD_CORE_SOURCE_DIR": str(LIB), "CDPATH": str(decoy)}
+    r = subprocess.run(
+        ["bash", "scripts/lib/sync-wizard-core.sh", "check"],
+        cwd=root, capture_output=True, text=True, env=env,
+    )
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
+def unguarded_self_dir_lines(text: str) -> list[int]:
+    """自分の場所を `cd` で解決している行のうち、`CDPATH=` で CDPATH を無効にしていないものの行番号。
+
+    `cd` に `$(dirname` / `BASH_SOURCE` を渡している行を対象にする（引用符の有無や `--` の有無、
+    `${BASH_SOURCE%/*}` の形に依らない）。コメント行は見ない。
+    """
+    bad = []
+    for n, line in enumerate(text.splitlines(), 1):
+        code = line.lstrip()
+        if code.startswith("#"):
+            continue
+        if re.search(r"\bcd\b", code) and ("$(dirname" in code or "BASH_SOURCE" in code) and "CDPATH=" not in code:
+            bad.append(n)
+    return bad
+
+
+def test_guard_catches_the_unguarded_forms():
+    for line in (
+        'D="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"',
+        'D="$(cd -- "$(dirname "${BASH_SOURCE[0]}")" && pwd)"',
+        'D="$(cd $(dirname ${BASH_SOURCE[0]}) && pwd)"',
+        'D="$(cd "${BASH_SOURCE%/*}" && pwd)"',
+    ):
+        assert unguarded_self_dir_lines(line) == [1], line
+    for line in (
+        'D="$(CDPATH=\'\' \\command cd -- "$(dirname "${BASH_SOURCE[0]}")" && pwd)"',
+        "# cd \"$(dirname は書かない",
+    ):
+        assert unguarded_self_dir_lines(line) == [], line
+
+
+def test_lib_scripts_always_disable_cdpath_when_resolving_their_own_dir():
+    bad = {f.name: unguarded_self_dir_lines(f.read_text()) for f in LIB.glob("*.sh")}
+    assert {k: v for k, v in bad.items() if v} == {}
