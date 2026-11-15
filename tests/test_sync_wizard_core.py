@@ -151,3 +151,30 @@ def test_network_fetches_retry_transient_failures(tmp_path):
     calls = log.read_text().splitlines()
     assert calls, "curl が呼ばれていない"
     assert all("--retry" in c and "--retry-connrefused" in c for c in calls), calls
+
+
+def test_script_dir_resolution_ignores_cdpath(tmp_path):
+    """`cd` は CDPATH を見て別の場所へ飛びうる。相対パスで呼んでも、自分の隣の写しを読むこと。"""
+    root = tmp_path / "consumer"
+    dest = root / "scripts" / "lib"
+    dest.mkdir(parents=True)
+    shutil.copy(LIB / "sync-wizard-core.sh", dest)
+    assert sync(dest, "update").returncode == 0
+    decoy = tmp_path / "decoy"
+    (decoy / "scripts" / "lib").mkdir(parents=True)  # CDPATH 経由だと、ここへ飛ぶ
+    env = {**os.environ, "WIZARD_CORE_SOURCE_DIR": str(LIB), "CDPATH": str(decoy)}
+    r = subprocess.run(
+        ["bash", "scripts/lib/sync-wizard-core.sh", "check"],
+        cwd=root, capture_output=True, text=True, env=env,
+    )
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_lib_scripts_never_use_the_bare_cd_dirname_form():
+    """素の `cd "$(dirname` を持ち込まない（CDPATH で別の場所へ飛ぶ）。`CDPATH= \\command cd` の形だけ許す。"""
+    bad = []
+    for f in LIB.glob("*.sh"):
+        for n, line in enumerate(f.read_text().splitlines(), 1):
+            if 'cd "$(dirname' in line and "CDPATH= \\command cd" not in line:
+                bad.append(f"{f.name}:{n}")
+    assert bad == [], bad

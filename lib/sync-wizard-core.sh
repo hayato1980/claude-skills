@@ -23,7 +23,9 @@ set -euo pipefail
 
 REPO="hayato1980/claude-skills"
 FILES=(wizard-core.sh sync-wizard-core.sh)
-DEST_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# CDPATH が設定された端末で `cd` が別の場所へ飛ばないよう、空にして組み込みの cd を使う。
+# shellcheck disable=SC1007
+DEST_DIR="$(CDPATH= \command cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # テスト用の「共有版」ディレクトリで update したときに印へ入れる SHA（40 桁の 0）。
 # ネットワークの check では解決できない。
 LOCAL_SHA="0000000000000000000000000000000000000000"
