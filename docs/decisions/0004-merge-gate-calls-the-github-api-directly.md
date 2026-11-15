@@ -22,6 +22,11 @@ CCW には `gh` CLI が無い。draft PR を ready 化し、CI を待ち、green
    探して呼ぶだけの中継。許可ルール `Bash(scripts/ci/ready_wait_merge.sh*)` が固定のパスを指す必要があるため、中継を残す。
    先頭に `bash` を付けた許可ルールは auto mode では無効になるため、スクリプトは単独で直接呼ぶ。
 
+6. **読み取りだけに限り、`session-closeout` の対象判定（`scripts/session_closeout/`）も同じ方式を使う。**
+   issue と PR の状態（`GET /issues/{n}`、`GET /pulls?head=...`）を `GH_TOKEN`（無ければ `GITHUB_TOKEN`）で
+   REST から直接読む。書き込みはしない。`gh` が無い点は同じで、`scripts/ci/` に置く中継を残す理由も 5 と同じ
+   （許可ルールが固定のパスを指す必要がある）。
+
 ## 結果
 
 ネットワーク部分（グルー）は手動確認、判定と結線（中継・設定の読み込み・fail-closed）は偽 curl を使ったテストで固定する。

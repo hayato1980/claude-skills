@@ -4,15 +4,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .bundles import Session, bucket_short
+from .bundles import BUCKET_BLOCKED, BUCKET_FAILED, BUCKET_WORKING, Session, bucket_short
 
 UNFINISHED = "未了"
 NEEDS_OWNER = "要確認"
 DONE = "終了"
 READ_CONVERSATION = "会話で判定"
 
-_WORKING = "SESSION_STATUS_BUCKET_WORKING"
-_STUCK = ("SESSION_STATUS_BUCKET_FAILED", "SESSION_STATUS_BUCKET_BLOCKED")
+_STUCK = (BUCKET_FAILED, BUCKET_BLOCKED)
 
 
 @dataclass(frozen=True)
@@ -38,14 +37,14 @@ class Verdict:
     issue_is_candidate: bool = False  # issue そのものを手順 4 の候補に入れるか
 
 
-def judge(sessions: list[Session], github: IssueState) -> Verdict:
+def judge(sessions: list[Session], issue_state: IssueState) -> Verdict:
     """束を丸ごと判定する。オーナーへの質問の有無は会話を読まないと分からないので、ここでは見ない（手順 3）。"""
-    prs = github.prs
+    prs = issue_state.prs
     open_prs = [p for p in prs if p.state == "open"]
     if open_prs:
         p = open_prs[0]
         return Verdict(UNFINISHED, f"PR #{p.number} が {'draft' if p.draft else 'open'}")
-    working = [s for s in sessions if s.bucket == _WORKING]
+    working = [s for s in sessions if s.bucket == BUCKET_WORKING]
     if working:
         return Verdict(UNFINISHED, f"{working[0].id} が working")
     stuck = [s for s in sessions if s.bucket in _STUCK]
@@ -53,7 +52,7 @@ def judge(sessions: list[Session], github: IssueState) -> Verdict:
         return Verdict(NEEDS_OWNER, f"{stuck[0].id} が status_bucket={bucket_short(stuck[0].bucket)}")
 
     merged = [p for p in prs if p.merged]
-    issue_open = github.state == "open"
+    issue_open = issue_state.state == "open"
     if merged:
         reason = f"PR #{merged[0].number} merged"
         if issue_open:
