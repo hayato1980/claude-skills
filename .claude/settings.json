@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(scripts/ci/ready_wait_merge.sh*)"
+      "Bash(scripts/ci/ready_wait_merge.sh*)",
+      "Bash(scripts/ci/session_closeout.sh*)"
     ]
   }
 }

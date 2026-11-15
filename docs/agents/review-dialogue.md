@@ -21,12 +21,12 @@
 
 ## push 前に流すコマンド
 
-`.github/workflows/ci.yml` の `test` ジョブと同じものを手元で流す（`jq`・`shellcheck`・`pytest` が要る）。
+`.github/workflows/ci.yml` の `test` ジョブと同じものを手元で流す（Python 3.13、`jq`・`shellcheck`・`pytest` が要る）。
 
 ```bash
 shellcheck plugins/dev-workflow/scripts/*.sh plugins/dev-workflow/hooks/*.sh plugins/dev-workflow/templates/*.sh
 python -m pytest tests -q
-claude plugin validate .
+npx --yes @anthropic-ai/claude-code plugin validate .
 ```
 
 公開リポの禁止語チェックは、`ci.yml` の「No private names」ステップの `git grep` をそのまま流す（語の一覧はそこにだけ置く）。
