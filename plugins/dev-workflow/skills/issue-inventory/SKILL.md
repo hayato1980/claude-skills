@@ -1,12 +1,14 @@
 ---
 name: issue-inventory
 description: "open な issue を全件見渡し、緊急度×重要度で評価して「次に着手すべき 3〜5 件」と「片付けの提案（見送り・重複・クローズ）」を 1 回で出す。台帳は作らず、判断は issue 自身にラベルとコメントで残す。「issue を棚卸して」「次に何を着手すべきか」「open issue を整理したい」「次に払い出す issue を選びたい」で発動。"
-allowed-tools: mcp__github__list_issues, mcp__github__search_issues, mcp__github__issue_read, mcp__github__get_label, Bash(gh issue list:*), Bash(gh issue view:*), Bash(gh search issues:*), Bash(gh label list:*)
+allowed-tools: mcp__github__list_issues, mcp__github__search_issues, mcp__github__issue_read, mcp__github__get_label, Bash(gh issue list:*), Bash(gh issue view:*), Bash(gh search issues:*), Bash(gh label list:*), mcp__github__issue_write, mcp__github__add_issue_comment, Bash(gh issue edit:*), Bash(gh issue comment:*), Bash(gh issue close:*), Bash(gh label create:*)
 ---
 
 Use this skill when: open な issue が多く溜まり、どれから着手すべきかが一目で分からなくなったとき。判断は人が下す前提で、このスキルは**材料を揃えて提案するだけ**。
 
 **`/triage` ではない。** `/triage` は自分が作っていない issue（外部からのバグ報告・要望）を agent-ready にするための入口。このスキルは既に agent-ready（またはそれに近い）open issue の**山**から、次の数件を選び出す出口側の作業。
+
+このスキルは tracker への書き込み（ラベル変更・コメント・クローズ）を確認なしで行える（`allowed-tools`）。`deferred` ラベルの作成を確認なしで行えるのは `gh` 経路だけで、MCP のラベル作成ツールは許可に入れていない（現行の GitHub MCP にラベル作成ツールが無いため。ある環境では許可プロンプトが出る）。許可の歯止めは手順 7 の**まとめて 1 回の承認**にある —— 承認前に書き込まない。
 
 ## 発動トリガー
 

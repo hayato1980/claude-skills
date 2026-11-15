@@ -49,6 +49,21 @@ def test_create_ccw_session_carries_its_own_write_permissions() -> None:
     assert "mcp__claude-code-remote__create_session" in tools
 
 
+def test_issue_inventory_carries_its_own_write_permissions() -> None:
+    # 利用側は同名の command を持たず、この allowed-tools に頼る。書き込み系が落ちても CI は
+    # 緑のまま、承認後の書き込みのたびに許可プロンプトが出るだけになるので、ここで固定する。
+    tools = frontmatter(PLUGIN / "skills" / "issue-inventory" / "SKILL.md")["allowed-tools"]
+    for tool in (
+        "mcp__github__issue_write",
+        "mcp__github__add_issue_comment",
+        "Bash(gh issue edit:*)",
+        "Bash(gh issue comment:*)",
+        "Bash(gh issue close:*)",
+        "Bash(gh label create:*)",
+    ):
+        assert tool in tools, tool
+
+
 def test_scripts_are_executable_and_shellcheck_clean() -> None:
     targets = [*SCRIPTS.glob("*.sh"), *(PLUGIN / "hooks").glob("*.sh"), *TEMPLATES.glob("*.sh")]
     assert len(targets) == 6
