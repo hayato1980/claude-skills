@@ -247,7 +247,7 @@ ready 化 → CI 完了待ち → green ならマージ、を 1 本で行う（�
 **購読とチェックインはマージを確認してから落とす。** ready にした直後に落とすと、赤で往復に戻ったときに相手の応答で起きられない。
 
 - **ready 化・マージに進めるのはレビュー側だけ。** 修正側はどちらも行わない。draft 状態がマージゲート（required status check を設定できないリポでは唯一のゲート）で、合意を判定した側だけがゲートを開けることで第三者性を保つ。
-- **CI の緑は ready の条件にしない。** 対象リポの CI は ready 化（と opened）でしか回らない設定が多い（`docs/agents/review-dialogue.md`「CI が走る条件」）。**ready 後の push では再実行されない**ので、緑はマージの条件であって ready の条件ではない。`ready_wait_merge.sh` が ready 化のあとに待つ。
+- **CI の緑は ready の条件にしない。** 対象リポの CI は ready 化（と opened）でしか回らない設定が多い（`docs/agents/review-dialogue.md` の `## CI が走る条件`）。**ready 後の push では再実行されない**ので、緑はマージの条件であって ready の条件ではない。`ready_wait_merge.sh` が ready 化のあとに待つ。
 - **購読とチェックインを落とす前に、そもそも[ラウンドの閉じ方 4](#4-購読してターンを終える)で購読していたかを一度確認する。** 呼んでいなければ『購読解除』は実質何もしない操作になる（未購読 PR への `unsubscribe_pr_activity` の挙動は未実測）。
 
 ### 8. 決裂 / 打ち切り —— 人へ渡す

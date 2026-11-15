@@ -22,9 +22,9 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq jq shellcheck
-          python -m pip install pytest
+          python -m pip install pytest pyyaml
       - name: shellcheck
-        run: shellcheck plugins/dev-workflow/scripts/*.sh plugins/dev-workflow/hooks/*.sh plugins/dev-workflow/templates/*.sh
+        run: shellcheck plugins/dev-workflow/scripts/*.sh plugins/dev-workflow/hooks/*.sh plugins/dev-workflow/templates/*.sh .github/actions/*/*.sh
       - name: pytest
         run: python -m pytest tests -q
       - name: No private names (public repository)

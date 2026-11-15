@@ -56,6 +56,19 @@
 | `docs/agents/dev-workflow.md` | `deny-mattpocock-implement` hook | `## /implement` の下に `止める: はい`（または `いいえ`）。無ければ止めない |
 | `docs/agents/plugin-update.md` | `update-plugins` hook | `## 更新するプラグイン` の下に `- \`プラグイン名@マーケットプレイス名\`` の箇条書き。**`dev-workflow@hayato` 自身は常に更新し、書いた一覧はそこに足される**（他のプラグインを更新したいときだけ書く。無ければ自身だけ） |
 
+### 各リポの CI から呼ぶもの
+
+| 何を | どう呼ぶか |
+|---|---|
+| `docs/agents/*.md` の見出しチェック | 既存のジョブの 1 ステップとして `uses: hayato1980/claude-skills/.github/actions/check-agent-headings@main`（先に checkout しておく。ジョブを増やさないので分単位の切り上げが増えない）。使っていないスキルのファイルは `with: ignore: docs/agents/xxx.md` で外す |
+| 赤い PR を draft に戻して表でコメント | ジョブごと `uses: hayato1980/claude-skills/.github/workflows/return-to-draft.yml@main`。`with:` に `job-name` / `job-result` / `checks`（`名前=結果` を 1 行 1 件）、`secrets:` に `draft_token`（PR を draft 化できる PAT / App のトークン）だけを名指しで渡す。呼び出し側のジョブに `permissions: pull-requests: write` が要る。トークン未登録なら戻す操作はせず、コメントで「戻せていない」と伝えてジョブを赤にする |
+
+**`return-to-draft.yml` は `@main` で参照すること**（sha やタグで固定しない）。中で呼ぶ composite action も `@main` なので、workflow だけを古い ref に固定すると、main での action の入力・本文の変更で壊れる、または挙動が黙って変わる。
+
+見出しの照合は**行の完全一致**（行末の空白・CR は不一致）。スキル側が行の完全一致で読むのと同じ規則にしてある。
+
+必須の見出しの一覧は [`plugins/dev-workflow/agent-headings.json`](./plugins/dev-workflow/agent-headings.json) の 1 か所だけ。スキルを足したり見出しを変えたりしたら一覧も直す（`tests/test_agent_headings.py` が一覧とスキル本文の食い違いを落とす）。
+
 ### 各リポに置く中継スクリプト
 
 `scripts/ci/ready_wait_merge.sh` を、プラグインの [`templates/ready_wait_merge.sh`](./plugins/dev-workflow/templates/ready_wait_merge.sh) のままコピーして置く（実行権限つき）。
