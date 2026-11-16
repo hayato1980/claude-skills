@@ -9,3 +9,4 @@
 | [0003](./0003-findings-land-through-a-wrapper-skill.md) | 指摘は、上流 code-review を包むスキル経由で 1 件 1 スレッドに着地させる |
 | [0004](./0004-merge-gate-calls-the-github-api-directly.md) | マージゲートは GitHub API を直接叩く（`session-closeout` の読み取りも同じ方式） |
 | [0005](./0005-model-follows-whether-errors-surface-immediately.md) | 払い出しのモデルは「誤りが即座に可視化されるか」で選ぶ |
+| [0006](./0006-config-tests-evaluate-with-the-tool.md) | 設定・IaC のテストは、ソースを正規表現で読まず、ツール自身に評価させた値で確かめる |

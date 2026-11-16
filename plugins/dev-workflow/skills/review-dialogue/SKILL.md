@@ -43,6 +43,8 @@ git merge-base HEAD origin/main
 Skill(skill="mattpocock-skills:code-review", args="<手順 1 の merge-base SHA>")
 ```
 
+**Standards の基準を書いた文書として [`standards.md`](./standards.md) を、基準点と一緒に渡す**（上流は「リポが文書化した基準」を探すので、プラグイン同梱のこの文書は呼び出し側が名指しで足す。中身は上流にも SKILL.md にも写さない）。
+
 **手順 1 で確定した基準点を渡した状態で呼ぶ。** 上流の Process 手順 1 は「基準点の指定が無ければユーザーに聞く」だが、人のいない子セッションはここで止まりうる。基準点を渡すことで、その分岐に一度も入らせない。
 
 **上流の手順をこの SKILL.md にコピーしない。** Standards / Spec の 2 軸の判定基準・Fowler smell baseline・sub-agent の起動は上流が持つ唯一の正本で、コピーは上流が更新されても静かに旧版のまま走る。
