@@ -118,3 +118,27 @@ def test_agent_contract_headings_are_documented() -> None:
         "## 払い出しを止めるラベル", "## タグの決め方", "## モデル表に足す行", "## source_url", "## /implement", "## 更新するプラグイン",
     ]:
         assert heading in readme, heading
+
+
+def _decision(number: str) -> Path:
+    found = sorted((REPO_ROOT / "docs" / "decisions").glob(f"{number}-*.md"))
+    assert len(found) == 1, f"判断 {number} のファイルが 1 つではありません: {found}"
+    return found[0]
+
+
+def test_decision_0006_is_listed_in_the_decisions_index() -> None:
+    name = _decision("0006").name
+    index = (REPO_ROOT / "docs" / "decisions" / "README.md").read_text(encoding="utf-8")
+    assert f"[0006](./{name})" in index
+
+
+def test_decision_0006_states_the_four_acceptance_points() -> None:
+    """受け入れ基準の 4 点（評価させる・評価できなければ分ける・既存は触るときに移す・限界）が見出しにある。
+
+    5 つ目の「レビューでの効かせ方」は受け入れ基準の 4 点の外（issue の「2.」側）なので、ここでは見ない。
+    """
+    body = _decision("0006").read_text(encoding="utf-8")
+    for heading in ("## 決めたこと", "## 評価できない形なら", "## 既存のテスト", "## 限界"):
+        assert heading in body, heading
+    decided = body.split("## 決めたこと")[1].split("\n## ")[0]
+    assert "ツール自身に評価させ" in decided
