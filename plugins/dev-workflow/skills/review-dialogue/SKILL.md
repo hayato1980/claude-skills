@@ -40,10 +40,10 @@ git merge-base HEAD origin/main
 ### 3. 上流 `mattpocock-skills:code-review` を呼ぶ
 
 ```
-Skill(skill="mattpocock-skills:code-review", args="<手順 1 の merge-base SHA>")
+Skill(skill="mattpocock-skills:code-review", args="<手順 1 の merge-base SHA>。Standards の基準文書として <standards.md の絶対パス> も読むこと")
 ```
 
-**Standards の基準を書いた文書として [`standards.md`](./standards.md) を、基準点と一緒に渡す**（上流は「リポが文書化した基準」を探すので、プラグイン同梱のこの文書は呼び出し側が名指しで足す。中身は上流にも SKILL.md にも写さない）。
+**`<standards.md の絶対パス>` は、このスキルを読み込んだときに示される base directory に `standards.md` を足して組み立てる。** このスキルはプラグインのキャッシュから読み込まれ、利用側のリポには `standards.md` が無い。上流が「リポを探す」手順では見つからず、SKILL.md からの相対パス（`./standards.md`）も利用側の作業ディレクトリからは解決できないので、**絶対パスで渡す**。渡し口は args の 1 つだけ。パスだけを args に足すと上流は spec の候補と取り違えるため、**「Standards の基準文書として」と役割を文に書く**。中身は上流にも SKILL.md にも写さない。
 
 **手順 1 で確定した基準点を渡した状態で呼ぶ。** 上流の Process 手順 1 は「基準点の指定が無ければユーザーに聞く」だが、人のいない子セッションはここで止まりうる。基準点を渡すことで、その分岐に一度も入らせない。
 
