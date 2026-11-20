@@ -97,6 +97,25 @@ def test_missing_optional_file_passes_but_present_one_is_checked(tmp_path: Path)
     assert run(spec, tmp_path).returncode == 1
 
 
+def test_optional_heading_may_be_absent_from_an_existing_file_but_required_ones_may_not(tmp_path: Path) -> None:
+    """後から足した見出しを、足していない利用側リポの CI で落とさない（ファイルが無くてよい optional とは別）。"""
+    spec = make_spec(tmp_path, [{**ONE[0], "optional_headings": ["任意の見出し"]}])
+    make_doc(tmp_path, "a.md", "## 見出し甲\n## 見出し乙\n")
+    assert run(spec, tmp_path).returncode == 0
+    make_doc(tmp_path, "a.md", "## 見出し甲\n")
+    proc = run(spec, tmp_path)
+    assert proc.returncode == 1
+    assert "## 見出し乙" in proc.stderr and "任意の見出し" not in proc.stderr
+
+
+@pytest.mark.parametrize("bad", ["任意", [1], [""]], ids=["str", "non-str-item", "empty-item"])
+def test_malformed_optional_headings_is_a_usage_error(tmp_path: Path, bad: object) -> None:
+    make_doc(tmp_path, "a.md", "## 見出し甲\n## 見出し乙\n")
+    proc = run(make_spec(tmp_path, [{**ONE[0], "optional_headings": bad}]), tmp_path)
+    assert proc.returncode == 3
+    assert "Traceback" not in proc.stderr
+
+
 def test_ignored_file_is_skipped(tmp_path: Path) -> None:
     assert run(make_spec(tmp_path, ONE), tmp_path, "docs/agents/a.md").returncode == 0
 
@@ -168,7 +187,7 @@ NOT_A_CONTRACT = {"Standards", "Spec"}
 
 def listed_headings() -> set[str]:
     spec = json.loads(SPEC.read_text(encoding="utf-8"))
-    return {h for entry in spec["files"] for h in entry["headings"]}
+    return {h for entry in spec["files"] for h in [*entry["headings"], *entry.get("optional_headings", [])]}
 
 
 def referenced_headings() -> set[str]:
@@ -205,7 +224,7 @@ def readme_pairs() -> set[tuple[str, str]]:
 def test_listed_pairs_match_the_readme_table_by_file_and_heading() -> None:
     """集合同士の比較では、見出しを別ファイルのエントリへ移しても緑のまま、利用側に誤ったファイルを要求する。"""
     spec = json.loads(SPEC.read_text(encoding="utf-8"))
-    listed = {(e["path"], h) for e in spec["files"] for h in e["headings"]}
+    listed = {(e["path"], h) for e in spec["files"] for h in [*e["headings"], *e.get("optional_headings", [])]}
     assert listed == readme_pairs()
 
 

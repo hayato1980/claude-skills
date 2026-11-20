@@ -51,7 +51,7 @@
 | `docs/agents/issue-tracker.md` | 全般 | 課題管理先（GitHub の owner/repo、使うツール）、tracker に書くコメントの署名・定型 |
 | `docs/agents/triage-labels.md` | `issue-inventory` | triage ラベルの対応表。棚卸しで除外するラベル・子セッションへ払い出せないラベル・評価の補正 |
 | `docs/agents/review-dialogue.md` | `review-dialogue` | `## オーナーマージの基準表`（基準・当たる・当たらない）／`## CI が走る条件`／`## push 前に流すコマンド` |
-| `docs/agents/pr-merge-gate.md` | `ready-merge`・`ready_wait_merge.sh` | `## CI で止めるジョブ`（`- \`ジョブ名\`` の箇条書き。**無い・空ならマージしない**） |
+| `docs/agents/pr-merge-gate.md` | `ready-merge`・`ready_wait_merge.sh` | `## CI で止めるジョブ`（`- \`ジョブ名\`` の箇条書き。**無い・空ならマージしない**）<br>任意: `## ready 前に実行するコマンド`（`- \`コマンド\`` の箇条書き。draft → ready 化の前に書いた順に実行し、失敗したら ready にしない。**見出しが無ければ何もしない・見出しがあって空ならエラー**） |
 | `docs/agents/ccw-dispatch.md` | `create-ccw-session` | `## 払い出しを止めるラベル`／`## タグの決め方`／`## モデル表に足す行`／`## source_url` |
 | `docs/agents/dev-workflow.md` | `deny-mattpocock-implement` hook | `## /implement` の下に `止める: はい`（または `いいえ`）。無ければ止めない |
 | `docs/agents/plugin-update.md` | `update-plugins` hook | `## 更新するプラグイン` の下に `- \`プラグイン名@マーケットプレイス名\`` の箇条書き。**`dev-workflow@hayato` 自身は常に更新し、書いた一覧はそこに足される**（他のプラグインを更新したいときだけ書く。無ければ自身だけ） |

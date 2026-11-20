@@ -3,6 +3,8 @@
 
 見出しは共有スキルとの契約で、変えるとスキルは何も言わずにその節を読まなくなる。
 必須の見出しの一覧は plugins/dev-workflow/agent-headings.json（スキルの近く）の 1 か所だけ。
+`optional_headings` の見出しは契約だが検査では求めない（後から足した見出しで、足していない利用側リポの
+CI を落とさないため。無ければスキルは何もしない）。
 
 照合はスキル側の読み方（行の完全一致。例: blocking_jobs.sh の `$0 == "## ..."`）と同じにする。
 行末の空白や CR を許すと、検査は緑なのにスキルは節を読めない、という逆の結果になる。
@@ -38,6 +40,9 @@ def load_spec(path: Path) -> list[dict[str, object]]:
             raise SpecError(f"{where}（{entry['path']}）の headings は空でない文字列のリストにしてください")
         if not isinstance(entry.get("optional", False), bool):
             raise SpecError(f"{where}（{entry['path']}）の optional は真偽値にしてください")
+        optional_headings = entry.get("optional_headings", [])
+        if not isinstance(optional_headings, list) or not all(isinstance(h, str) and h for h in optional_headings):
+            raise SpecError(f"{where}（{entry['path']}）の optional_headings は空でない文字列のリストにしてください")
     return files
 
 
