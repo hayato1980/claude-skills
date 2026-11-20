@@ -66,7 +66,7 @@ def test_issue_inventory_carries_its_own_write_permissions() -> None:
 
 def test_scripts_are_executable_and_shellcheck_clean() -> None:
     targets = [*SCRIPTS.glob("*.sh"), *(PLUGIN / "hooks").glob("*.sh"), *TEMPLATES.glob("*.sh")]
-    assert len(targets) == 10
+    assert len(targets) == 11
     for t in targets:
         assert os.access(t, os.X_OK), t
         assert subprocess.run(["bash", "-n", str(t)], check=False).returncode == 0, t

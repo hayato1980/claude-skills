@@ -3,6 +3,7 @@
 #
 # 契約: 見出し `## CI で止めるジョブ` の下の箇条書き ``- `名前` ``。次の `## ` で終わる。
 # 見つからない／空のときは、黙って「ジョブ 0 個 = 常に OK」にならないよう非ゼロで終わる。
+# 節の読み取り規則は section_bullets.sh と共有。
 #
 # 使い方: blocking_jobs.sh <pr-merge-gate.md>
 set -euo pipefail
@@ -17,13 +18,8 @@ if [ ! -f "$doc" ]; then
   exit 1
 fi
 
-jobs_found="$(awk '
-  /^## / { in_section = ($0 == "## CI で止めるジョブ"); next }
-  in_section && match($0, /^- `[^`]+`/) {
-    name = substr($0, RSTART + 3, RLENGTH - 4)
-    print name
-  }
-' "$doc")"
+SCRIPT_DIR="$(CDPATH='' \command cd -- "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+jobs_found="$(bash "${SCRIPT_DIR}/section_bullets.sh" "$doc" "CI で止めるジョブ" || true)"
 
 if [ -z "$jobs_found" ]; then
   echo "${doc} に『## CI で止めるジョブ』の箇条書き（- \`ジョブ名\`）がありません" >&2

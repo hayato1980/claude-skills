@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import re
 import subprocess
@@ -18,6 +19,12 @@ from conftest import PLUGIN, REPO_ROOT, SCRIPTS
 
 SCRIPT = REPO_ROOT / ".github" / "actions" / "check-agent-headings" / "check_agent_headings.py"
 SPEC = PLUGIN / "agent-headings.json"
+
+# 見出しの一覧の読み方（検証・平らにする規則）はチェッカー自身のものを使う。テストに別実装を持たない。
+_loader = importlib.util.spec_from_file_location("check_agent_headings", SCRIPT)
+assert _loader is not None and _loader.loader is not None
+checker = importlib.util.module_from_spec(_loader)
+_loader.loader.exec_module(checker)
 
 
 def run(spec: Path, root: Path, *ignore: str) -> subprocess.CompletedProcess[str]:
@@ -187,7 +194,7 @@ NOT_A_CONTRACT = {"Standards", "Spec"}
 
 def listed_headings() -> set[str]:
     spec = json.loads(SPEC.read_text(encoding="utf-8"))
-    return {h for entry in spec["files"] for h in [*entry["headings"], *entry.get("optional_headings", [])]}
+    return {h for entry in checker.load_spec(SPEC) for h in checker.declared_headings(entry)}
 
 
 def referenced_headings() -> set[str]:
@@ -223,8 +230,7 @@ def readme_pairs() -> set[tuple[str, str]]:
 
 def test_listed_pairs_match_the_readme_table_by_file_and_heading() -> None:
     """集合同士の比較では、見出しを別ファイルのエントリへ移しても緑のまま、利用側に誤ったファイルを要求する。"""
-    spec = json.loads(SPEC.read_text(encoding="utf-8"))
-    listed = {(e["path"], h) for e in spec["files"] for h in [*e["headings"], *e.get("optional_headings", [])]}
+    listed = {(e["path"], h) for e in checker.load_spec(SPEC) for h in checker.declared_headings(e)}
     assert listed == readme_pairs()
 
 

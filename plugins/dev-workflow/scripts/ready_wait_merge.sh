@@ -110,6 +110,62 @@ _api_or_die() {
   _api_body "$resp"
 }
 
+# 手元ゲート。draft → ready 化する経路から呼ぶ。失敗したら exit 1 で ready 化に進ませない。
+# 設定の読み取りは local_gate_commands.sh（見出しが無ければ何も出さない = 従来どおり。
+# 見出しだけで箇条書きが空なら非ゼロ = ここで止まる）。
+run_local_gate() {
+  local local_gate_commands comment_payload comment_resp comment_status
+  local local_head_sha gate_command gate_exit
+  # 設定の読み取りは local_gate_commands.sh（見出しが無ければ何も出さない = 従来どおり。
+  # 見出しだけで箇条書きが空なら非ゼロ = ここで止まる）。
+  local_gate_commands="$(bash "$LOCAL_GATE_SCRIPT" "${REPO_ROOT}/docs/agents/pr-merge-gate.md")"
+  if [ -n "$SKIP_LOCAL_GATE_REASON" ] && [ -z "$local_gate_commands" ]; then
+    echo "手元ゲートの設定が無いリポなので、省略するものがありません。--skip-local-gate は無視して続けます（コメントも残しません）。"
+  elif [ -n "$SKIP_LOCAL_GATE_REASON" ]; then
+    # 抜け道を使った理由は、ready 化の **前** に PR へ残す。残せないまま通さない（失敗したら ready にしない）。
+    comment_payload=$(jq -n --arg body "[ready-merge] 手元ゲートを省略しました: ${SKIP_LOCAL_GATE_REASON}" '{body: $body}')
+    comment_resp=$(_api POST "${GH_API}/repos/${OWNER}/${REPO}/issues/${PR_NUMBER}/comments" "$comment_payload")
+    comment_status=$(_api_status "$comment_resp")
+    if [ "$comment_status" != "201" ]; then
+      echo "手元ゲートを省略した理由の PR コメントに失敗しました（HTTP ${comment_status}）: $(_api_body "$comment_resp")" >&2
+      echo "理由を残せないまま省略できないので、ready にしません。" >&2
+      exit 1
+    fi
+    echo "手元ゲートを省略します（理由を PR #${PR_NUMBER} にコメントしました）: ${SKIP_LOCAL_GATE_REASON}"
+  elif [ -n "$local_gate_commands" ]; then
+    # 呼ぶのはオーナーだけでなく review-dialogue のレビュー側も含む。PR のブランチがチェック
+    # アウトされているとは限らず、別のコードを検査して通ってしまう恐れがあるので、実行前に
+    # 手元の HEAD が PR の head と一致し、未コミットの変更が無いことを確かめる。
+    local_head_sha="$(git -C "$REPO_ROOT" rev-parse HEAD)"
+    if [ "$local_head_sha" != "$pr_head_sha" ]; then
+      echo "手元の HEAD が PR #${PR_NUMBER} の head と一致しません。ready にしません。" >&2
+      echo "  手元の HEAD: ${local_head_sha}" >&2
+      echo "  PR の head : ${pr_head_sha}" >&2
+      echo "PR のブランチをチェックアウトして最新にしてから再実行してください。" >&2
+      exit 1
+    fi
+    if [ -n "$(git -C "$REPO_ROOT" status --porcelain)" ]; then
+      echo "作業ツリーに未コミットの変更があります。手元だけにある変更で通ってしまうため、ready にしません。" >&2
+      echo "コミットするか退避してから再実行してください。" >&2
+      exit 1
+    fi
+    while IFS= read -r gate_command; do
+      echo "手元ゲート: ${gate_command}"
+      set +e
+      # stdin を閉じる: ループの here-string を `bash -c` が継ぐと、stdin を読むコマンド（cat・ssh・
+      # docker run -i など）が後続の行を飲み込み、後ろの失敗するコマンドが走らずにゲートが素通りする。
+      (CDPATH='' \command cd -- "$REPO_ROOT" && bash -c "$gate_command" < /dev/null)
+      gate_exit=$?
+      set -e
+      if [ "$gate_exit" -ne 0 ]; then
+        echo "手元ゲートが失敗しました（終了コード ${gate_exit}）: ${gate_command}" >&2
+        echo "ready にしません。" >&2
+        exit 1
+      fi
+    done <<< "$local_gate_commands"
+  fi
+}
+
 # ---- 引数の解釈 ----
 # 形: ready_wait_merge.sh [--skip-local-gate "<理由>"] [PR番号]（順不同）。
 # 抜け道なので、理由なしは API を 1 つも呼ぶ前に拒否する（直後が無い・空・空白だけ・`--` 始まり）。
@@ -181,53 +237,8 @@ fi
 
 # ---- ready化（既に ready ならスキップ。冪等性） ----
 if [ "$pr_draft" = "true" ]; then
-  # ---- 手元ゲート（draft → ready 化する経路でだけ。ready 化前に手元で落ちるものを落とす） ----
-  # 設定の読み取りは local_gate_commands.sh（見出しが無ければ何も出さない = 従来どおり。
-  # 見出しだけで箇条書きが空なら非ゼロ = ここで止まる）。
-  local_gate_commands="$(bash "$LOCAL_GATE_SCRIPT" "${REPO_ROOT}/docs/agents/pr-merge-gate.md")"
-  if [ -n "$SKIP_LOCAL_GATE_REASON" ] && [ -z "$local_gate_commands" ]; then
-    echo "手元ゲートの設定が無いリポなので、省略するものがありません。--skip-local-gate は無視して続けます（コメントも残しません）。"
-  elif [ -n "$SKIP_LOCAL_GATE_REASON" ]; then
-    # 抜け道を使った理由は、ready 化の **前** に PR へ残す。残せないまま通さない（失敗したら ready にしない）。
-    comment_payload=$(jq -n --arg body "[ready-merge] 手元ゲートを省略しました: ${SKIP_LOCAL_GATE_REASON}" '{body: $body}')
-    comment_resp=$(_api POST "${GH_API}/repos/${OWNER}/${REPO}/issues/${PR_NUMBER}/comments" "$comment_payload")
-    comment_status=$(_api_status "$comment_resp")
-    if [ "$comment_status" != "201" ]; then
-      echo "手元ゲートを省略した理由の PR コメントに失敗しました（HTTP ${comment_status}）: $(_api_body "$comment_resp")" >&2
-      echo "理由を残せないまま省略できないので、ready にしません。" >&2
-      exit 1
-    fi
-    echo "手元ゲートを省略します（理由を PR #${PR_NUMBER} にコメントしました）: ${SKIP_LOCAL_GATE_REASON}"
-  elif [ -n "$local_gate_commands" ]; then
-    # 呼ぶのはオーナーだけでなく review-dialogue のレビュー側も含む。PR のブランチがチェック
-    # アウトされているとは限らず、別のコードを検査して通ってしまう恐れがあるので、実行前に
-    # 手元の HEAD が PR の head と一致し、未コミットの変更が無いことを確かめる。
-    local_head_sha="$(git -C "$REPO_ROOT" rev-parse HEAD)"
-    if [ "$local_head_sha" != "$pr_head_sha" ]; then
-      echo "手元の HEAD が PR #${PR_NUMBER} の head と一致しません。ready にしません。" >&2
-      echo "  手元の HEAD: ${local_head_sha}" >&2
-      echo "  PR の head : ${pr_head_sha}" >&2
-      echo "PR のブランチをチェックアウトして最新にしてから再実行してください。" >&2
-      exit 1
-    fi
-    if [ -n "$(git -C "$REPO_ROOT" status --porcelain)" ]; then
-      echo "作業ツリーに未コミットの変更があります。手元だけにある変更で通ってしまうため、ready にしません。" >&2
-      echo "コミットするか退避してから再実行してください。" >&2
-      exit 1
-    fi
-    while IFS= read -r gate_command; do
-      echo "手元ゲート: ${gate_command}"
-      set +e
-      (cd "$REPO_ROOT" && bash -c "$gate_command")
-      gate_exit=$?
-      set -e
-      if [ "$gate_exit" -ne 0 ]; then
-        echo "手元ゲートが失敗しました（終了コード ${gate_exit}）: ${gate_command}" >&2
-        echo "ready にしません。" >&2
-        exit 1
-      fi
-    done <<< "$local_gate_commands"
-  fi
+  # 手元ゲート（draft → ready 化する経路でだけ。ready 化前に手元で落ちるものを落とす）。
+  run_local_gate
 
   # ready化 **前** に、この head SHA の現在の最大 check run id を控える。
   # 本リポの正規のリカバリ運用（draft に戻して push 無しで再度 ready にする）では、
@@ -269,6 +280,9 @@ if [ "$pr_draft" = "true" ]; then
   fi
 else
   echo "PR #${PR_NUMBER} は既に ready です。ready化はスキップします。"
+  if [ -n "$SKIP_LOCAL_GATE_REASON" ]; then
+    echo "すでに ready の PR では手元ゲートを実行しないので、--skip-local-gate は無視して続けます（コメントも残しません）。"
+  fi
   # ready化 自体をスキップするので、前サイクルの結果を混同する余地は無い
   # （baseline_id は 0 のまま。既存の run をそのまま今回の結果として見てよい）。
   readonly BASELINE_ID=0

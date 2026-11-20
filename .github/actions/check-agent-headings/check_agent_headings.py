@@ -46,6 +46,11 @@ def load_spec(path: Path) -> list[dict[str, object]]:
     return files
 
 
+def declared_headings(entry: dict[str, object]) -> list[str]:
+    """契約として宣言されている見出し全部（必須の headings と、検査では求めない optional_headings）。"""
+    return [*entry["headings"], *entry.get("optional_headings", [])]  # type: ignore[misc,attr-defined]
+
+
 def level_two_headings(doc: Path) -> set[str]:
     # 改行は LF だけで割る（CRLF の CR を行末に残す）。スキル側（awk / grep）が見る行と同じにするため。
     lines = doc.read_bytes().decode("utf-8").split("\n")

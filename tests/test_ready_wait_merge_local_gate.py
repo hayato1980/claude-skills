@@ -71,8 +71,7 @@ class FakeGitHub:
 
 @pytest.fixture
 def fake_github(repo: Path) -> Iterator[tuple[FakeGitHub, str]]:
-    head = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True, check=True).stdout.strip()
-    state = FakeGitHub(head_sha=head)
+    state = FakeGitHub(head_sha=local_head(repo))
 
     class Handler(BaseHTTPRequestHandler):
         def _handle(self) -> None:
@@ -102,8 +101,12 @@ def fake_github(repo: Path) -> Iterator[tuple[FakeGitHub, str]]:
         server.server_close()
 
 
-def git(repo: Path, *args: str) -> None:
-    subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True)
+def git(repo: Path, *args: str) -> str:
+    return subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True, text=True).stdout.strip()
+
+
+def local_head(repo: Path) -> str:
+    return git(repo, "rev-parse", "HEAD")
 
 
 @pytest.fixture
@@ -128,15 +131,16 @@ def run_script(repo: Path, api: str, *args: str) -> subprocess.CompletedProcess[
     return subprocess.run(["bash", str(SCRIPT), *args], capture_output=True, text=True, check=False, env=env, cwd=repo)
 
 
-def start_server_for_current_head(repo: Path, fake: FakeGitHub) -> None:
-    fake.head_sha = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True, check=True).stdout.strip()
+def sync_fake_head_to_local(repo: Path, fake: FakeGitHub) -> None:
+    """偽 API が返す PR の head を、手元の HEAD に合わせる（= PR のブランチをチェックアウト済みの状態）。"""
+    fake.head_sha = local_head(repo)
 
 
 class TestLocalGate:
     def test_failing_command_stops_before_ready(self, repo: Path, fake_github: tuple[FakeGitHub, str]) -> None:
         fake, api = fake_github
         set_gate_doc(repo, GATE_DOC_WITH_COMMANDS.format(commands="- `exit 3`"))
-        start_server_for_current_head(repo, fake)
+        sync_fake_head_to_local(repo, fake)
 
         proc = run_script(repo, api, str(PR))
 
@@ -159,7 +163,7 @@ class TestLocalGate:
     ) -> None:
         fake, api = fake_github
         set_gate_doc(repo, GATE_DOC_WITH_COMMANDS.format(commands="- `echo one >> ran.log`\n- `echo two >> ran.log`"))
-        start_server_for_current_head(repo, fake)
+        sync_fake_head_to_local(repo, fake)
 
         proc = run_script(repo, api, str(PR))
 
@@ -172,7 +176,7 @@ class TestLocalGate:
     ) -> None:
         fake, api = fake_github
         set_gate_doc(repo, GATE_DOC_WITH_COMMANDS.format(commands="- `echo first >> ran.log`\n- `exit 42`\n- `echo third >> ran.log`"))
-        start_server_for_current_head(repo, fake)
+        sync_fake_head_to_local(repo, fake)
 
         proc = run_script(repo, api, str(PR))
 
@@ -181,10 +185,23 @@ class TestLocalGate:
         assert "exit 42" in proc.stderr
         assert "42" in proc.stderr
 
+    def test_command_reading_stdin_does_not_swallow_the_commands_after_it(
+        self, repo: Path, fake_github: tuple[FakeGitHub, str]
+    ) -> None:
+        fake, api = fake_github
+        set_gate_doc(repo, GATE_DOC_WITH_COMMANDS.format(commands="- `cat > /dev/null`\n- `exit 5`"))
+        sync_fake_head_to_local(repo, fake)
+
+        proc = run_script(repo, api, str(PR))
+
+        assert proc.returncode != 0
+        assert fake.ready_calls == 0
+        assert "exit 5" in proc.stderr
+
     def test_head_mismatch_blocks_ready_and_shows_both_shas(self, repo: Path, fake_github: tuple[FakeGitHub, str]) -> None:
         fake, api = fake_github
         set_gate_doc(repo, GATE_DOC_WITH_COMMANDS.format(commands="- `echo ran >> ran.log`"))
-        local_head = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True, check=True).stdout.strip()
+        local_sha = local_head(repo)
         fake.head_sha = "f" * 40  # PR の head は手元と違う
 
         proc = run_script(repo, api, str(PR))
@@ -192,13 +209,13 @@ class TestLocalGate:
         assert proc.returncode != 0
         assert fake.ready_calls == 0
         assert not (repo / "ran.log").exists()  # 別のコードを検査して通ることのないよう、コマンドも走らせない
-        assert local_head in proc.stderr and "f" * 40 in proc.stderr
+        assert local_sha in proc.stderr and "f" * 40 in proc.stderr
         assert "チェックアウト" in proc.stderr
 
     def test_uncommitted_changes_block_ready(self, repo: Path, fake_github: tuple[FakeGitHub, str]) -> None:
         fake, api = fake_github
         set_gate_doc(repo, GATE_DOC_WITH_COMMANDS.format(commands="- `echo ran >> ran.log`"))
-        start_server_for_current_head(repo, fake)
+        sync_fake_head_to_local(repo, fake)
         (repo / "scratch.txt").write_text("手元だけの変更")
 
         proc = run_script(repo, api, str(PR))
@@ -211,7 +228,7 @@ class TestLocalGate:
         fake, api = fake_github
         fake.draft = False
         set_gate_doc(repo, GATE_DOC_WITH_COMMANDS.format(commands="- `exit 3`"))
-        start_server_for_current_head(repo, fake)
+        sync_fake_head_to_local(repo, fake)
 
         proc = run_script(repo, api, str(PR))
 
@@ -222,7 +239,7 @@ class TestLocalGate:
     def test_heading_without_bullets_blocks_ready(self, repo: Path, fake_github: tuple[FakeGitHub, str]) -> None:
         fake, api = fake_github
         set_gate_doc(repo, GATE_DOC_WITH_COMMANDS.format(commands="書き損じ"))
-        start_server_for_current_head(repo, fake)
+        sync_fake_head_to_local(repo, fake)
 
         proc = run_script(repo, api, str(PR))
 
@@ -239,7 +256,7 @@ class TestSkipLocalGate:
     ) -> None:
         fake, api = fake_github
         set_gate_doc(repo, self.COMMANDS)
-        start_server_for_current_head(repo, fake)
+        sync_fake_head_to_local(repo, fake)
 
         proc = run_script(repo, api, str(PR), "--skip-local-gate", *reason_args)
 
@@ -254,7 +271,7 @@ class TestSkipLocalGate:
     ) -> None:
         fake, api = fake_github
         set_gate_doc(repo, self.COMMANDS)
-        start_server_for_current_head(repo, fake)
+        sync_fake_head_to_local(repo, fake)
         args = ["--skip-local-gate", "別 PR で検査済み", str(PR)] if order == "option-first" else [str(PR), "--skip-local-gate", "別 PR で検査済み"]
 
         proc = run_script(repo, api, *args)
@@ -269,13 +286,27 @@ class TestSkipLocalGate:
         fake, api = fake_github
         fake.comment_status = 403
         set_gate_doc(repo, self.COMMANDS)
-        start_server_for_current_head(repo, fake)
+        sync_fake_head_to_local(repo, fake)
 
         proc = run_script(repo, api, str(PR), "--skip-local-gate", "理由")
 
         assert proc.returncode != 0
         assert fake.ready_calls == 0
         assert "403" in proc.stderr
+
+    def test_already_ready_pr_ignores_the_skip_visibly_and_posts_no_comment(
+        self, repo: Path, fake_github: tuple[FakeGitHub, str]
+    ) -> None:
+        fake, api = fake_github
+        fake.draft = False
+        set_gate_doc(repo, self.COMMANDS)
+        sync_fake_head_to_local(repo, fake)
+
+        proc = run_script(repo, api, str(PR), "--skip-local-gate", "理由")
+
+        assert proc.returncode == 0, proc.stderr
+        assert fake.comments == []
+        assert "--skip-local-gate" in proc.stdout and "無視" in proc.stdout
 
     def test_repo_without_config_posts_no_comment_and_continues(self, repo: Path, fake_github: tuple[FakeGitHub, str]) -> None:
         fake, api = fake_github

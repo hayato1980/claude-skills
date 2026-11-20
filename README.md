@@ -56,6 +56,11 @@
 | `docs/agents/dev-workflow.md` | `deny-mattpocock-implement` hook | `## /implement` の下に `止める: はい`（または `いいえ`）。無ければ止めない |
 | `docs/agents/plugin-update.md` | `update-plugins` hook | `## 更新するプラグイン` の下に `- \`プラグイン名@マーケットプレイス名\`` の箇条書き。**`dev-workflow@hayato` 自身は常に更新し、書いた一覧はそこに足される**（他のプラグインを更新したいときだけ書く。無ければ自身だけ） |
 
+**表の「任意」の 2 種類（`plugins/dev-workflow/agent-headings.json` のキー）**: 見出しチェックは、表の見出しをすべて「あること」として求める。例外は 2 つで、混同しないこと。
+
+- `optional: true`（ファイル単位）: **ファイル自体が無くてよい**。ファイルがあるなら、その `headings` はすべて要る。
+- `optional_headings`（見出し単位）: **ファイルはあるが、その見出しは無くてよい**。後から足した見出しで、まだ書いていない利用側リポの CI を落とさないため。無ければスキルは何もしない（例: `pr-merge-gate.md` の `## ready 前に実行するコマンド`）。
+
 ### 各リポの CI から呼ぶもの
 
 | 何を | どう呼ぶか |
