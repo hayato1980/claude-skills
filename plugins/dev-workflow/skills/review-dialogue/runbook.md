@@ -29,12 +29,12 @@
 レビュー側  取り下げ or 維持を明示 → 納得したスレッドを resolve
                   ↓
             全件 resolved → ready_wait_merge.sh で CI 待ち → green ならマージ → 修正側をポーク → 購読解除 → 終了
-                  ↓ ポークで起床（オーナーマージなら merged イベントで起床）
-修正側      retro-closeout（retro → 承認表 → 着地 → レビュー側と自分をアーカイブ）
                             （needs-owner-merge なら ready 化して CI を見届けて止める / CI 赤・コンフリクトなら draft に戻して往復へ。直すのは修正側）
             割れたまま 3 往復 → 決裂として人へ渡す → 購読解除 → 終了
             相手が来ない      → 打ち切りとして人へ渡す → 購読解除 → 終了
             表に無い中身の判断が要る → オーナー判断待ちとして人へ渡す → 購読解除 → 終了（判断後はレビューを払い出し直す）
+                  ↓ マージ後、ポーク（オーナーマージなら merged イベント）で起床
+修正側      retro-closeout（retro → 承認表 → 着地 → レビュー側と自分をアーカイブ）
 ```
 
 ---
@@ -231,7 +231,7 @@ ready 化 → CI 完了待ち → green ならマージ、を 1 本で行う（�
 
 | 出力 | 意味 | やること |
 |---|---|---|
-| `PR #N をマージしました。` | 完了 | 修正側を[ポーク](#2-相手を起こすポーク)で起こす（`prompt` は「PR #<PR 番号> がマージされた。dev-workflow の retro-closeout スキルを実行せよ。」）。そのうえで購読を解除し、保留中のチェックインを消して終わる。**自分ではアーカイブしない** —— 修正側が retro で自分の会話を読み、最後にアーカイブする（→ [`retro-closeout`](../retro-closeout/SKILL.md)） |
+| `PR #N をマージしました。` | 完了 | 修正側を[ポーク](#2-相手を起こすポーク)で起こし（`prompt`: 「PR #<PR 番号> がマージされた。dev-workflow の retro-closeout スキルを実行せよ。」）、購読とチェックインを消して終わる。アーカイブはしない（→ [`retro-closeout`](../retro-closeout/SKILL.md)） |
 | `CI red。マージしません。` | ゲート失敗 | 下の「CI が赤だったとき」へ |
 | `タイムアウトしました` | 判定不能 | まず `mergeable_state` を見る。`dirty` なら（待っている間に main が動いて衝突した）コンフリクトとして下の「CI が赤だったとき」へ。そうでなければ **1 回だけ**再実行する。2 回続いたら PR 本体に `[レビュー] CI 判定不能` と書き、`ready-for-human` を付けて人へ渡す |
 | マージ時に `Pull Request is not mergeable`（HTTP `405`） | マージコンフリクト | 下の「CI が赤だったとき」と同じ手順で修正側へ返す（スレッドには「コンフリクト」と書く） |
@@ -350,7 +350,7 @@ mcp__github__add_reply_to_pull_request_comment(owner, repo, pullNumber, commentI
 
 ### 8. マージされたら retro を回して締める
 
-**フロー起動で始まった修正側は、PR がマージされたら [`retro-closeout`](../retro-closeout/SKILL.md) を実行する。** レビュー側のポークで起きても、PR 購読の merged イベント（オーナーマージ）で起きても同じ。オーナーの指示は待たない。フロー起動でない修正側（ふつうの直接作業）は、オーナーが頼んだときだけ実行する。
+→ [`retro-closeout`](../retro-closeout/SKILL.md)
 
 ### 9. push の前に
 

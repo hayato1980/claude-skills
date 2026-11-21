@@ -54,6 +54,5 @@ msg+="オーナーの指示を待たず、create-ccw-session スキル（dev-wor
 msg+="今すぐ実行せよ（対象 issue: #${issue}、ブランチ claude/issue-${issue}）。"
 msg+="list_sessions(mine=true, limit=100) で既存の review-dialogue セッションが無いことを revision で確認し、無ければ create_session を 1 回呼ぶ。"
 msg+="その後 review-dialogue スキルの runbook「修正側の手順」に合流する。自分で /code-review は回さない。"
-msg+="PR がマージされたら（レビュー側のポークか merged イベントで起きる）、retro-closeout スキル（dev-workflow）で retro を回し、承認表で着地させてから自分をアーカイブする。"
 
 jq -n --arg ctx "$msg" '{hookSpecificOutput: {hookEventName: "PostToolUse", additionalContext: $ctx}}'
