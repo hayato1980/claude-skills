@@ -271,11 +271,11 @@ ready 化 → CI 完了待ち → green ならマージ、を 1 本で行う（�
 
 ## 修正側の手順
 
-### 1. 最初の prompt が `tdd` なら、まずレビューを自分で払い出す
+### 1. 最初の prompt がフロー起動なら、まずレビューを自分で払い出す
 
-**最初に受け取ったプロンプトが `/mattpocock-skills:tdd #<番号>` だったセッション**（`create-ccw-session` で払い出された子のほか、オーナーが直接セッションで最初に tdd を打った場合も含む）は、draft PR を作成した直後に、自分自身で review-dialogue セッションを払い出す（手順は [`create-ccw-session`](../create-ccw-session/SKILL.md)「tdd の自動レビュー払い出し」。プラグインの hook が PR 作成直後にこれを思い出させる）。
+**最初に受け取ったプロンプトが `/<プラグイン名>:<フロー語> #<番号>` だったセッション**（`tdd` / `diagnosing-bugs` / `grill-with-docs` 等。`create-ccw-session` で払い出された子のほか、オーナーが直接セッションで最初にフローを打った場合も含む。`dev-workflow:*` の器は除く）は、draft PR を作成した直後に、自分自身で review-dialogue セッションを払い出す（手順は [`create-ccw-session`](../create-ccw-session/SKILL.md)「PR 作成後の自動レビュー払い出し」。プラグインの hook が PR 作成直後にこれを思い出させる）。
 
-**それ以外の修正側はこの手順を飛ばす** —— 最初の prompt が tdd 以外のセッション（ふつうの直接作業、`tdd` 以外のフローで払い出された子）はレビューを自分で払い出さない。hook から「払い出された子か」は区別できないので、線は「最初の prompt が tdd か」で引く。レビューは引き続きオーナーが `/create-ccw-session #NNN review-dialogue` で別途払い出す。
+**それ以外の修正側はこの手順を飛ばす** —— 最初の prompt がフロー起動でないセッション（ふつうの直接作業）はレビューを自分で払い出さない。hook から「払い出された子か」は区別できないので、線は「最初の prompt がフロー起動か」で引く。レビューは引き続きオーナーが `/create-ccw-session #NNN review-dialogue` で別途払い出す。
 
 ### 2. PR を作ったら必ず自己チェックインを張る
 

@@ -27,7 +27,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/tdd-review-dispatch.sh"
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/pr-review-dispatch.sh"
           }
         ]
       }
