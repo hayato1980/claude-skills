@@ -12,7 +12,7 @@ import pytest
 
 from conftest import PLUGIN, REPO_ROOT, SCRIPTS, TEMPLATES
 
-SKILLS = ["issue-inventory", "review-dialogue", "create-ccw-session", "ready-merge", "session-closeout"]
+SKILLS = ["issue-inventory", "review-dialogue", "create-ccw-session", "ready-merge", "session-closeout", "retro-closeout"]
 FRONTMATTER = re.compile(r"\A---\n(.*?)\n---\n", re.S)
 
 # 非公開リポの名前・ホスト名・業務ドメインの語。正規表現の文字クラスで組み、このファイル自身に
@@ -60,6 +60,19 @@ def test_issue_inventory_carries_its_own_write_permissions() -> None:
         "Bash(gh issue comment:*)",
         "Bash(gh issue close:*)",
         "Bash(gh label create:*)",
+    ):
+        assert tool in tools, tool
+
+
+def test_retro_closeout_carries_its_own_write_permissions() -> None:
+    # 子は無人で走るので、承認後の着地とアーカイブのたびに許可プロンプトで止まらないよう固定する。
+    tools = frontmatter(PLUGIN / "skills" / "retro-closeout" / "SKILL.md")["allowed-tools"]
+    for tool in (
+        "mcp__github__issue_write",
+        "mcp__github__add_issue_comment",
+        "mcp__claude-code-remote__archive_session",
+        "mcp__claude-code-remote__unsubscribe_pr_activity",
+        "mcp__claude-code-remote__delete_trigger",
     ):
         assert tool in tools, tool
 

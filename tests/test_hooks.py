@@ -57,6 +57,8 @@ class TestPrReviewDispatch:
         assert "create-ccw-session" in ctx
         assert "#1429" in ctx and "claude/issue-1429" in ctx
         assert "/code-review は回さない" in ctx
+        # マージ後は retro を回して自分で締める（retro-closeout）。PR 作成時点で予告しておく。
+        assert "retro-closeout" in ctx
 
     @pytest.mark.parametrize("flow", ["mattpocock-skills:tdd", "mattpocock-skills:diagnosing-bugs"])
     def test_command_tag_form_also_matches(self, tmp_path: Path, flow: str) -> None:
