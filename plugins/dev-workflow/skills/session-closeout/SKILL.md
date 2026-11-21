@@ -103,7 +103,7 @@ mcp__claude-code-remote__list_events(session_id=<id>, kinds=["user", "assistant"
 
 後続の issue を払い出すかどうかと、どのフローで払い出すかは、払い出しスキル [`create-ccw-session`](../create-ccw-session/SKILL.md) の「フロー案の出し方」で issue ごとに案を出す（フロー語の実在確認も同スキルどおり）。**同じ役割の子**が既に走っていれば、払い出さない。役割は手順 1〜2 のスクリプトの出力（束ごとのセッションと役割）で見る。束に無い issue なら `--issue <番号>` を付けて再実行する。
 
-- レビュー（review 往復）を払い出すとき: revision が `claude/issue-<番号>` そのものである、archive されていないセッションがあれば止める（→ `create-ccw-session`「tdd の自動レビュー払い出し」手順 1）
+- レビュー（review 往復）を払い出すとき: revision が `claude/issue-<番号>` そのものである、archive されていないセッションがあれば止める（→ `create-ccw-session`「PR 作成後の自動レビュー払い出し」手順 1）
 - それ以外（push するフロー）を払い出すとき: 同じ `issue-<番号>` を持ち、revision が `claude/issue-<番号>` ではない、archive されていないセッションがあれば止める（同じブランチに push する子を 2 つ走らせない → 同スキル「`outcome_branch`」）
 
 ### 5. 承認表を 1 枚出す
