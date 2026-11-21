@@ -12,6 +12,9 @@
       "path": "docs/agents/pr-merge-gate.md",
       "headings": [
         "CI で止めるジョブ"
+      ],
+      "optional_headings": [
+        "ready 前に実行するコマンド"
       ]
     },
     {

@@ -29,4 +29,8 @@ CCW には `gh` CLI が無い。draft PR を ready 化し、CI を待ち、green
 
 ## 結果
 
-ネットワーク部分（グルー）は手動確認、判定と結線（中継・設定の読み込み・fail-closed）は偽 curl を使ったテストで固定する。
+ネットワーク部分（グルー）の CI 待ち〜マージは手動確認、判定と結線（中継・設定の読み込み・fail-closed）は偽 curl を使ったテストで固定する。
+
+`ready_wait_merge.sh` は API の向き先を環境変数 `READY_MERGE_GH_API`（未設定なら `https://api.github.com`）で差し替えられる。
+ready 化の前に走る手元ゲート（`--skip-local-gate` の理由コメントを含む）は、これを手元の偽 API サーバへ向けた pytest で、
+ready 化・マージ・コメントの呼び出しの有無を検査する（#18）。
