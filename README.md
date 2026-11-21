@@ -7,7 +7,7 @@
 
 | プラグイン | 中身 |
 |---|---|
-| `dev-workflow` | プロジェクト非依存の開発ワークフロー。スキル 5 本（`issue-inventory` / `review-dialogue` / `create-ccw-session` / `ready-merge` / `session-closeout`）と hook 3 本（`pr-review-dispatch` / `deny-mattpocock-implement` / `update-plugins`）、マージゲートのスクリプト（`ready_wait_merge.sh` / `judge_gate_checks.sh`） |
+| `dev-workflow` | プロジェクト非依存の開発ワークフロー。スキル 6 本（`issue-inventory` / `review-dialogue` / `create-ccw-session` / `ready-merge` / `session-closeout` / `retro-closeout`）と hook 3 本（`pr-review-dispatch` / `deny-mattpocock-implement` / `update-plugins`）、マージゲートのスクリプト（`ready_wait_merge.sh` / `judge_gate_checks.sh`） |
 
 ## 導入する
 

@@ -7,6 +7,8 @@ allowed-tools: Skill(dev-workflow:create-ccw-session), mcp__claude-code-remote__
 
 Use this skill when: 払い出した子セッションが溜まり、終わったものを片付けたいとき。片付けの前に、そのセッションにしか無い知見と後続タスクを拾い上げる。
 
+マージ済みの子は自分で [`retro-closeout`](../retro-closeout/SKILL.md) を回して閉じる。このスキルはそこから漏れた束を拾う。
+
 **親セッションで走らせる。** 判断の質がそのまま成果になる作業なので、直接開いたセッションなら `/model opus` に上げてから回す。
 
 ## 発動トリガー

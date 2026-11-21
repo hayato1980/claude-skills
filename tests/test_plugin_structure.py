@@ -12,7 +12,7 @@ import pytest
 
 from conftest import PLUGIN, REPO_ROOT, SCRIPTS, TEMPLATES
 
-SKILLS = ["issue-inventory", "review-dialogue", "create-ccw-session", "ready-merge", "session-closeout"]
+SKILLS = ["issue-inventory", "review-dialogue", "create-ccw-session", "ready-merge", "session-closeout", "retro-closeout"]
 FRONTMATTER = re.compile(r"\A---\n(.*?)\n---\n", re.S)
 
 # 非公開リポの名前・ホスト名・業務ドメインの語。正規表現の文字クラスで組み、このファイル自身に
