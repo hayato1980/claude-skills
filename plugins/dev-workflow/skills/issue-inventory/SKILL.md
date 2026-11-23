@@ -1,7 +1,7 @@
 ---
 name: issue-inventory
 description: "open な issue を全件見渡し、緊急度×重要度で評価して「次に着手すべき 3〜5 件」と「片付けの提案（見送り・重複・クローズ）」を 1 回で出す。台帳は作らず、判断は issue 自身にラベルとコメントで残す。「issue を棚卸して」「次に何を着手すべきか」「open issue を整理したい」「次に払い出す issue を選びたい」で発動。"
-allowed-tools: mcp__github__list_issues, mcp__github__search_issues, mcp__github__issue_read, mcp__github__get_label, Bash(gh issue list:*), Bash(gh issue view:*), Bash(gh search issues:*), Bash(gh label list:*), mcp__github__issue_write, mcp__github__add_issue_comment, Bash(gh issue edit:*), Bash(gh issue comment:*), Bash(gh issue close:*), Bash(gh label create:*)
+allowed-tools: mcp__github__list_issues, mcp__github__search_issues, mcp__github__issue_read, mcp__github__get_label, Bash(gh issue list:*), Bash(gh issue view:*), Bash(gh search issues:*), Bash(gh api -X GET search/issues*), Bash(gh label list:*), mcp__github__list_pull_requests, mcp__github__issue_write, mcp__github__add_issue_comment, Bash(gh issue edit:*), Bash(gh issue comment:*), Bash(gh issue close:*), Bash(gh label create:*)
 ---
 
 Use this skill when: open な issue が多く溜まり、どれから着手すべきかが一目で分からなくなったとき。判断は人が下す前提で、このスキルは**材料を揃えて提案するだけ**。
@@ -81,6 +81,13 @@ Use this skill when: open な issue が多く溜まり、どれから着手す�
 
 - 最終更新から 30 日超
 - タイトルが closed issue / merged PR と重なる
+
+closed issue・merged PR は、手順 1 で決めた操作手段で引く。クエリは issue が `repo:<owner>/<repo> is:issue is:closed <キーワード>`、PR が `repo:<owner>/<repo> is:pr is:merged <キーワード>`（`is:closed` だと、マージされずに閉じた PR まで拾う）。
+
+- **`gh` の場合**: `gh search issues` か `gh api -X GET search/issues -f q='<クエリ>'`
+- **MCP の場合**: `mcp__github__search_issues`（同じクエリ）。クラウドの実行環境では提供されないことがあり、そのときは `mcp__github__list_issues`（`state="CLOSED"`）と `mcp__github__list_pull_requests`（`state="closed"` のうち `merged_at` があるものだけ）のタイトルと突き合わせる
+
+どちらでも引けなければ、重なりの信号は見ずに進め、手順 7 の出力に「closed / merged との重なりは未確認（理由: …）」と 1 行書く。
 
 この 2 つ以外（例: 「関連 issue の兄弟が軒並み closed」「コメント 0 のまま古い」）は信号として使わない。誤検出が多く、まだ着手していないだけの issue を陳腐化と誤判定してしまう。
 

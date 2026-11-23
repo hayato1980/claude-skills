@@ -2,7 +2,7 @@
 name: session-closeout
 description: "仕事を終えた CCW セッションを締める。会話にしか無い知見を issue へ着地させ、後続タスクを起票・払い出し、最後にアーカイブする（承認表 1 枚で一括）。「終わったセッションを片付けて」「セッションを締めて」「アーカイブして後続を払い出して」で発動。"
 argument-hint: "[#NNN ...]"
-allowed-tools: Skill(dev-workflow:create-ccw-session), mcp__claude-code-remote__list_sessions, mcp__claude-code-remote__get_session, mcp__claude-code-remote__list_events, mcp__claude-code-remote__create_session, mcp__claude-code-remote__archive_session, mcp__claude-code-remote__unarchive_session, mcp__github__issue_read, mcp__github__list_pull_requests, mcp__github__pull_request_read, mcp__github__search_issues, mcp__github__issue_write, mcp__github__add_issue_comment, Bash(scripts/ci/session_closeout.sh*), Bash(grep:*), Bash(jq:*), Bash(ls:*), Bash(sort:*), Bash(tail:*), Read
+allowed-tools: Skill(dev-workflow:create-ccw-session), mcp__claude-code-remote__list_sessions, mcp__claude-code-remote__get_session, mcp__claude-code-remote__list_events, mcp__claude-code-remote__create_session, mcp__claude-code-remote__archive_session, mcp__claude-code-remote__unarchive_session, mcp__github__issue_read, mcp__github__list_pull_requests, mcp__github__pull_request_read, mcp__github__search_issues, mcp__github__list_issues, mcp__github__issue_write, mcp__github__add_issue_comment, Bash(scripts/ci/session_closeout.sh*), Bash(gh api -X GET search/issues*), Bash(grep:*), Bash(jq:*), Bash(ls:*), Bash(sort:*), Bash(tail:*), Read
 ---
 
 Use this skill when: 払い出した子セッションが溜まり、終わったものを片付けたいとき。片付けの前に、そのセッションにしか無い知見と後続タスクを拾い上げる。
@@ -98,10 +98,37 @@ mcp__claude-code-remote__list_events(session_id=<id>, kinds=["user", "assistant"
 
 | 拾ったもの | 着地先 |
 |---|---|
-| 後続タスク（まだ issue が無い） | **新規 issue**。起票前に `mcp__github__search_issues` で重複を探し、あれば既存の issue へのコメントに切り替える |
-| 後続タスク（既存の open issue がある） | その issue を払い出しの候補にする |
+| 後続タスク（まだ issue が無い） | 下の「起票の基準」を両方満たすときだけ **新規 issue**。満たさなければコメント（関係する issue・PR）か、PR 本文への記録にとどめる。起票案は必ず下の「重複の確認」を通す |
+| 後続タスク（既存の open issue・open PR がある） | その issue・PR へのコメント。issue なら払い出しの候補にする |
 | 知見（元の issue の文脈で読むもの） | 元の issue（closed でも可）へのコメント |
-| 知見（SKILL.md・判断記録・runbook・台帳を書き換えるべきもの） | **新規 issue** にして、それを払い出しの候補にする。ファイルの書き換えをこのセッションで始めない |
+| 知見（SKILL.md・判断記録・runbook・台帳を書き換えるべきもの） | 「起票の基準」を満たせば **新規 issue** にして、それを払い出しの候補にする。満たさなければ関係する issue・PR へのコメント。ファイルの書き換えをこのセッションで始めない |
+
+#### 起票の基準（既定は起票しない）
+
+新規 issue にしてよいのは、次の**両方**を満たすものだけ。
+
+1. **直さないと実害が出る。** 本番・実験・CI のどれかで、何が壊れるか・何を誤るかを 1 行で言える。その 1 行を承認表の理由列に書く
+2. **コメントでは足りない。** 既存の open issue・open PR へのコメントで済むなら、そちらにする
+
+どちらかを言えないもの（文書への一言、念のための測定、好みの整理、思いついた改善）は起票しない。関係する issue・PR へのコメントか、PR 本文への記録にとどめる。迷ったら起票しない側に倒す。
+
+#### 重複の確認（黙って飛ばさない）
+
+起票案ごとに、次の 3 つと突き合わせる。どれかと同じ件なら、起票をやめてその issue・PR へのコメントに切り替える。
+
+- **open の issue**
+- **open の PR**（同じ直しの PR が既に出ていることがある）
+- **当日に作られた issue（closed を含む）**。同じ日の兄弟セッションが、同じ反省から同じ issue を起票していることがある
+
+手段は、使えるものを上から順に使う。
+
+1. `mcp__github__search_issues`（`q="repo:<owner>/<repo> <キーワード>"`。PR も `is:pr is:open` で引ける）
+2. `gh api -X GET search/issues -f q='repo:<owner>/<repo> <キーワード>'`（MCP の検索ツールが提供されない環境向け。PR は `is:pr is:open`、当日分は `created:>=<YYYY-MM-DD>` を足す）
+3. どちらも使えなければ、`mcp__github__list_issues`（open 全件は `state="OPEN"`、当日分は `state` を省略して `orderBy="CREATED_AT", direction="DESC"`）と `mcp__github__list_pull_requests`（`state="open"`）のタイトルを突き合わせる
+
+確認できなかった起票案は、承認表の理由列に「重複未確認（理由: …）」と書いて出す。確認を飛ばしたまま、何も書かずに起票案を載せない。
+
+この承認表の中でも突き合わせる。複数の束から同じ起票案が出たら 1 行にまとめ、理由列に出どころの束を並べる。
 
 後続の issue を払い出すかどうかと、どのフローで払い出すかは、払い出しスキル [`create-ccw-session`](../create-ccw-session/SKILL.md) の「フロー案の出し方」で issue ごとに案を出す（フロー語の実在確認も同スキルどおり）。**同じ役割の子**が既に走っていれば、払い出さない。役割は手順 1〜2 のスクリプトの出力（束ごとのセッションと役割）で見る。束に無い issue なら `--issue <番号>` を付けて再実行する。
 
@@ -115,7 +142,7 @@ mcp__claude-code-remote__list_events(session_id=<id>, kinds=["user", "assistant"
 ```
 | # | 束 | 判定 | 操作 | 内容 | 理由 |
 |---|---|---|---|---|---|
-| 1 | #1601 | 終了 | 起票 | feat(x): 子がスコープ外とした設定の移行を行う | 子が「スコープ外」と明記して残した |
+| 1 | #1601 | 終了 | 起票 | feat(x): 子がスコープ外とした設定の移行を行う | 実害: 旧設定のままだと次のデプロイで CI が落ちる。重複: open issue・open PR・当日分に無し（gh api search/issues） |
 | 2 | #1601 | 終了 | コメント | #1601 へ: 手元で再現した手順の実測 | PR に書かれていない |
 | 3 | #1601 | 終了 | 払い出し | 行 1 の issue → /mattpocock-skills:tdd（claude-sonnet-5-5） | 仕様が子の会話で確定済み |
 | 4 | #1601 | 終了 | アーカイブ | session_01Ab…（tdd）, session_01Cd…（レビュー） | PR #1610 merged |
@@ -124,7 +151,7 @@ mcp__claude-code-remote__list_events(session_id=<id>, kinds=["user", "assistant"
 ```
 
 - 払い出しの行には、フローと払い出しスキルの割り当て表で引いた model を書く
-- 起票の行には、issue タイトルを書く（本文は実行時に、拾った根拠を引用して書く）
+- 起票の行には、issue タイトルを書く（本文は実行時に、拾った根拠を引用して書く）。理由列には、実害の 1 行と重複の確認結果（使った手段、または「重複未確認（理由: …）」）を書く
 - オーナーは行ごとに OK か、書き換えか、却下を返す。書き換えがあればその行を検証し直し、**書き換えがあったときだけ**表を出し直す
 
 ### 6. OK が出た行だけを、この順で実行する
@@ -151,6 +178,7 @@ GitHub に書く本文の末尾には、ハーネスが定める attribution foo
 | 対象を引く・判定する | `list_sessions(mine=true, limit=100)` → `scripts/ci/session_closeout.sh` |
 | 会話を読む | `list_events`（`kinds` で絞る） |
 | issue・PR を読む | `issue_read`、`list_pull_requests`、`pull_request_read`、`search_issues` |
+| 重複を確かめる | → 手順 4「重複の確認」 |
 | 着地させる | `add_issue_comment`、`issue_write` |
 | 払い出す | `create_session`（引数は `create-ccw-session`） |
 | 片付ける | `archive_session`（戻すときは `unarchive_session`） |
