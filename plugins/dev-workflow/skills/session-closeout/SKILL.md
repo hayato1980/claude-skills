@@ -124,7 +124,7 @@ mcp__claude-code-remote__list_events(session_id=<id>, kinds=["user", "assistant"
 
 1. `mcp__github__search_issues`（`q="repo:<owner>/<repo> <キーワード>"`。PR も `is:pr is:open` で引ける）
 2. `gh api -X GET search/issues -f q='repo:<owner>/<repo> <キーワード>'`（MCP の検索ツールが提供されない環境向け。PR は `is:pr is:open`、当日分は `created:>=<YYYY-MM-DD>` を足す）
-3. どちらも使えなければ、`mcp__github__list_issues`（open 全件と、`state="all"` を作成日の新しい順に引いた当日分）と `mcp__github__list_pull_requests`（`state="open"`）のタイトルを突き合わせる
+3. どちらも使えなければ、`mcp__github__list_issues`（open 全件は `state="OPEN"`、当日分は `state` を省略して `orderBy="CREATED_AT", direction="DESC"`）と `mcp__github__list_pull_requests`（`state="open"`）のタイトルを突き合わせる
 
 確認できなかった起票案は、承認表の理由列に「重複未確認（理由: …）」と書いて出す。確認を飛ばしたまま、何も書かずに起票案を載せない。
 
@@ -142,7 +142,7 @@ mcp__claude-code-remote__list_events(session_id=<id>, kinds=["user", "assistant"
 ```
 | # | 束 | 判定 | 操作 | 内容 | 理由 |
 |---|---|---|---|---|---|
-| 1 | #1601 | 終了 | 起票 | feat(x): 子がスコープ外とした設定の移行を行う | 実害: 旧設定のままだと次のデプロイで CI が落ちる。重複: open issue・open PR・当日分に無し（search_issues） |
+| 1 | #1601 | 終了 | 起票 | feat(x): 子がスコープ外とした設定の移行を行う | 実害: 旧設定のままだと次のデプロイで CI が落ちる。重複: open issue・open PR・当日分に無し（gh api search/issues） |
 | 2 | #1601 | 終了 | コメント | #1601 へ: 手元で再現した手順の実測 | PR に書かれていない |
 | 3 | #1601 | 終了 | 払い出し | 行 1 の issue → /mattpocock-skills:tdd（claude-sonnet-5-5） | 仕様が子の会話で確定済み |
 | 4 | #1601 | 終了 | アーカイブ | session_01Ab…（tdd）, session_01Cd…（レビュー） | PR #1610 merged |
@@ -178,7 +178,7 @@ GitHub に書く本文の末尾には、ハーネスが定める attribution foo
 | 対象を引く・判定する | `list_sessions(mine=true, limit=100)` → `scripts/ci/session_closeout.sh` |
 | 会話を読む | `list_events`（`kinds` で絞る） |
 | issue・PR を読む | `issue_read`、`list_pull_requests`、`pull_request_read`、`search_issues` |
-| 重複を確かめる | `search_issues` → 無ければ `gh api -X GET search/issues` → 無ければ `list_issues` と `list_pull_requests` |
+| 重複を確かめる | → 手順 4「重複の確認」 |
 | 着地させる | `add_issue_comment`、`issue_write` |
 | 払い出す | `create_session`（引数は `create-ccw-session`） |
 | 片付ける | `archive_session`（戻すときは `unarchive_session`） |

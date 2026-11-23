@@ -48,7 +48,7 @@ find "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/cache" -path "*/skills/*/retro
 
 着地先・承認表・実行順は [`session-closeout`](../session-closeout/SKILL.md) 手順 4〜6 に従う。違いは次だけ。
 
-- **起票の基準と重複の確認は `session-closeout` 手順 4 のとおり。** 既定は起票しない。retro の改善案も、実害を 1 行で言えて、既存の issue・PR へのコメントでは足りないものだけを起票案にする
+- **起票の基準と重複の確認は `session-closeout` 手順 4 のとおり。** retro の改善案も例外にしない
 - **着地先に `hayato1980/claude-skills` を足す。** retro の改善案のうち、このプラグインや共有スキルの本文を変えるべきものはそこへ起票する。重複の確認もそのリポに対して行う。公開リポなので、対象リポの名前・パス・ホスト名・業務ドメインの語を書かない。固有の事情抜きで説明できないものは対象リポに起票する。書けないセッションでは `add_repo(owner="hayato1980", repo="claude-skills", access="push")` を 1 回だけ呼ぶ。**拒否されたら、対象リポには起票しない。** 承認表のその行は操作を「文面を渡す」にし、手順 5 の報告に起票の文面（タイトルと本文）をそのまま書いてオーナーに渡す
 - **払い出しはしない。** 後続 issue は親の [`issue-inventory`](../issue-inventory/SKILL.md) が拾う
 - 拾うものが無くても、アーカイブの 1 行だけの表を出してオーナーの返事を待つ
