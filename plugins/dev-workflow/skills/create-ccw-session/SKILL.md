@@ -293,7 +293,8 @@ create_session(
 1. `list_sessions(mine=true, limit=100)` を引き、[runbook](../review-dialogue/runbook.md)「ラウンドの閉じ方」手順 1 の
    **「相手を引く」と同じ読み方**（保存ファイルに書き、`grep | jq` で、アーカイブ済みを除いて読む）で、既存の
    review-dialogue セッションが無いか確認する。**`tags` のフロー語では判定しない。**
-   `tags` に `issue-<番号>` を含み、アーカイブ済みでなく、**自分自身（環境変数 `CLAUDE_CODE_REMOTE_SESSION_ID`）
+   `tags` に `issue-<番号>` を含み、アーカイブ済みでなく、**自分自身
+   （除き方は [runbook](../review-dialogue/runbook.md)「ラウンドの閉じ方」手順 1。環境変数と行の `id` は接頭辞が違う）
    を除いた**行を候補とする。自分（修正側）も同じ `issue-<番号>` タグを持つので、自分を除かないと自分自身を
    「既に走っている」と誤判定して払い出しをスキップしてしまう。
    候補が 0 行なら払い出す（手順 2 へ）。1 行以上なら、候補ごとに `get_session(session_id)` で

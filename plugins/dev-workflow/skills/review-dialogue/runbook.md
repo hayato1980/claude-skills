@@ -54,7 +54,7 @@ mcp__claude-code-remote__list_sessions(mine=true, limit=100)
 
 - `tags` に `issue-<番号>` を含む
 - `session_status` が **`SESSION_STATUS_ARCHIVED` でない**
-- **自分自身ではない** —— 環境変数 `CLAUDE_CODE_REMOTE_SESSION_ID`（Bash で `echo "$CLAUDE_CODE_REMOTE_SESSION_ID"`）と `id` が一致する行を除く
+- **自分自身ではない** —— 自分の行を除く。**環境変数 `CLAUDE_CODE_REMOTE_SESSION_ID` と行の `id` は接頭辞が違う**（環境変数は `cse_015Gb…`、行の `id` は `session_015Gb…`。接頭辞より後ろは同じ）ので、そのままでは一致しない。`SELF="${CLAUDE_CODE_REMOTE_SESSION_ID#cse_}"` で接頭辞を外し、行の `id` から `session_` を外した値と比べる（`get_session()` を session_id 省略で呼んで返る自分の `id` と比べてもよい）。**他の文書の「自分の除外」はこの記述を参照する**
 
 残った行の数で決める。
 
