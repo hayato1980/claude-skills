@@ -272,7 +272,7 @@ create_session(
 - **フロー語は `review-dialogue`。** プラグイン配布のスキルなので `prompt` は `/dev-workflow:review-dialogue #<番号>`。
   `code-review` という語は**上流スキルの名前としてのみ残る**（器がその上流を内側で呼ぶ）。
 - `source_revision` に `claude/issue-<番号>` を渡す（実装済みブランチを起点にする）。**これを渡すのは
-  `review-dialogue` フローだけ**で、往復の相手判定はこの `revision` を見る（→ [runbook](../review-dialogue/runbook.md)「ラウンドの閉じ方」手順 1）。
+  `review-dialogue` フローだけ**で、`revision` は、同じ issue のセッションが複数あるときにレビュー側を見分けるのに使う（候補の取り方は `issue-<番号>` タグ + 自分の除外。→ [runbook](../review-dialogue/runbook.md)「ラウンドの閉じ方」手順 1）。
 - `outcome_branch` も同じ `claude/issue-<番号>`。
 - **レビュー側は push しない。** 指摘は PR 上のスレッドとして投稿し、**直すのは修正側**（＝その PR を作ったセッション）。
   両者は全スレッドが解決するまで往復する（→ [runbook](../review-dialogue/runbook.md)）。読むだけのレビューにしないのは、
@@ -293,12 +293,17 @@ create_session(
 1. `list_sessions(mine=true, limit=100)` を引き、[runbook](../review-dialogue/runbook.md)「ラウンドの閉じ方」手順 1 の
    **「相手を引く」と同じ読み方**（保存ファイルに書き、`grep | jq` で、アーカイブ済みを除いて読む）で、既存の
    review-dialogue セッションが無いか確認する。**`tags` のフロー語では判定しない。**
-   `session_context.sources[0].git_repository.revision` が `claude/issue-<番号>` **そのもの**で、アーカイブ済みで
-   ない行を探す。`tags` の第 3 要素が偶然フロー語と同じ文字列になる（issue タイトルが `[review-dialogue] ...` 型等）と、
-   `tags` だけの判定では**自分自身を「既に走っている」と誤判定して払い出しをスキップしてしまう**。`revision` は
-   `source_revision` 引数からのみ埋まり、review-dialogue フローの払い出しだけがこれを渡すので、タグとの衝突に
-   影響されない。見つかったら払い出さず、既存のものに任せる —— 2 本走らせると往復の「相手を引く」で相手が 2 件
-   ヒットし、どちらも起こせなくなる。
+   `tags` に `issue-<番号>` を含み、アーカイブ済みでなく、**自分自身
+   （除き方は [runbook](../review-dialogue/runbook.md)「ラウンドの閉じ方」手順 1。環境変数と行の `id` は接頭辞が違う）
+   を除いた**行を候補とする。自分（修正側）も同じ `issue-<番号>` タグを持つので、自分を除かないと自分自身を
+   「既に走っている」と誤判定して払い出しをスキップしてしまう。
+   候補が 0 行なら払い出す（手順 2 へ）。1 行以上なら、候補ごとに `get_session(session_id)` で
+   `session_context.sources[0].git_repository.revision` を読む（`list_sessions` の行では欠けるが `get_session`
+   では読める）。
+   - `claude/issue-<番号>` **そのもの**の行がある → 既に走っている。払い出さず、既存のものに任せる ——
+     2 本走らせると往復の「相手を引く」で相手が 2 件ヒットし、どちらも起こせなくなる。
+   - 無い（読めた上でどれも別の値・未設定） → 候補はレビュー側ではない（同じ issue の別セッション）。払い出す。
+   - 読めない行がある → 払い出さずに人へ渡す（既に走っているか判断できない）。
 2. 見つからなければ、[上の「そのレビューを払い出す」呼び出し例](#呼び出し例)と**同じ引数**で `create_session` を
    自分で 1 回呼ぶ。`title` の issue タイトルと第 3 タグは、自分が最初に受け取った issue 番号から
    `mcp__github__issue_read` で取り直す。**[払い出す前の門](#払い出す前の門)は通し直さない** —— 実装の払い出しで
