@@ -50,13 +50,21 @@
 mcp__claude-code-remote__list_sessions(mine=true, limit=100)
 ```
 
-返ってきた各行の **`tags`**・**`session_status`**・**`session_context.sources`** を見て、次を**すべて**満たす 1 行が相手。
+返ってきた各行の **`tags`**・**`session_status`** を見て、次を**すべて**満たす行を集める。
 
 - `tags` に `issue-<番号>` を含む
 - `session_status` が **`SESSION_STATUS_ARCHIVED` でない**
-- 相手側の役割 —— `session_context.sources[0].git_repository.revision` を見る。**自分がレビュー側なら修正側を探す**ので revision が `claude/issue-<番号>` **以外**（既定は未設定、または `refs/heads/main` 等のデフォルトブランチ）、**自分が修正側ならレビュー側を探す**ので revision が `claude/issue-<番号>` **そのもの**
+- **自分自身ではない** —— 環境変数 `CLAUDE_CODE_REMOTE_SESSION_ID`（Bash で `echo "$CLAUDE_CODE_REMOTE_SESSION_ID"`）と `id` が一致する行を除く
 
-**役割判定は `tags` のフロー語ではなく `revision` で行う。** `tags` の第 3 要素（領域・種別タグ）は issue から機械的に決まる（→ [`create-ccw-session`](../create-ccw-session/SKILL.md)「`create_session` の引数」）ため、issue タイトルがフロー語そのものを含むと（例: `feat(review-dialogue): ...`）、第 3 タグとフロー語タグが同じ文字列になり、`tags` の中身だけでは両者を区別できない。**実測で踏んだ**：修正側セッションが第 3 タグとして偶然 `review-dialogue` を持ち、旧来の「`tags` に `review-dialogue` を含むか」という判定ではレビュー側から誤って除外され、相手 0 件になった。`revision` は `create_session` の `source_revision` 引数からのみ埋まり、**`review-dialogue` フローの払い出しだけがこれを渡す**（→ [レビューの払い出し](../create-ccw-session/SKILL.md#レビューの払い出し)）ので、第 3 タグとの衝突に影響されない。修正側は `tdd` とは限らず、`diagnosing-bugs` でも `grill-with-docs` でも、タグの無いオーナーの手元セッションでもよい（→ [役割](#役割)）ため、レビュー側からの判定は依然として否定形（`claude/issue-<番号>` 以外）になる。
+残った行の数で決める。
+
+- **1 行** → それが相手。
+- **0 行** → 相手が引けない（正常系。下記）。
+- **2 行以上** → `revision`（`session_context.sources[0].git_repository.revision`）で絞り込む。**自分がレビュー側なら修正側を探す**ので revision が `claude/issue-<番号>` **以外**、**自分が修正側ならレビュー側を探す**ので revision が `claude/issue-<番号>` **そのもの**の行だけ残す。それでも 2 行以上、または revision が読めず絞れないなら、下の「どれも起こさない」へ。
+
+**`revision` を引く条件にしてはいけない。** `list_sessions` の行では `session_context` が `null`（`sources` も欠ける）ことがあり、実測では 100 行すべてで null だったこともある（#30）。revision を必須条件にすると、**修正側からレビュー側が 0 件に見えてポークが空振りし、往復が静かに止まる**（レビュー側からの判定は否定形なので当たり、修正側の方向だけが壊れる）。`revision` は絞り込みにだけ使い、欠けていれば使わない。
+
+**役割判定を `tags` のフロー語で行わない。** `tags` の第 3 要素（領域・種別タグ）は issue から機械的に決まる（→ [`create-ccw-session`](../create-ccw-session/SKILL.md)「`create_session` の引数」）ため、issue タイトルがフロー語そのものを含むと、第 3 タグとフロー語タグが同じ文字列になり区別できない（実測で踏んだ）。上の手順は `issue-<番号>` タグと自分の除外だけを使うので、この衝突に影響されない。
 
 **`RUNNING` に絞ってはいけない。** こちらの応答を待ってターンを終えた相手は `SESSION_STATUS_IDLE` で、往復の待ち時間のほとんどはこの状態にある。RUNNING 限定にすると**まさに起こすべき相手だけが引けなくなる**。外すのは archive 済み（＝終わった過去の子）だけでよい。
 

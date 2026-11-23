@@ -272,7 +272,7 @@ create_session(
 - **フロー語は `review-dialogue`。** プラグイン配布のスキルなので `prompt` は `/dev-workflow:review-dialogue #<番号>`。
   `code-review` という語は**上流スキルの名前としてのみ残る**（器がその上流を内側で呼ぶ）。
 - `source_revision` に `claude/issue-<番号>` を渡す（実装済みブランチを起点にする）。**これを渡すのは
-  `review-dialogue` フローだけ**で、往復の相手判定はこの `revision` を見る（→ [runbook](../review-dialogue/runbook.md)「ラウンドの閉じ方」手順 1）。
+  `review-dialogue` フローだけ**で、`revision` は往復の相手が複数残ったときの絞り込みに使う（相手判定の本体は `issue-<番号>` タグ + 自分の除外。→ [runbook](../review-dialogue/runbook.md)「ラウンドの閉じ方」手順 1）。
 - `outcome_branch` も同じ `claude/issue-<番号>`。
 - **レビュー側は push しない。** 指摘は PR 上のスレッドとして投稿し、**直すのは修正側**（＝その PR を作ったセッション）。
   両者は全スレッドが解決するまで往復する（→ [runbook](../review-dialogue/runbook.md)）。読むだけのレビューにしないのは、
@@ -293,12 +293,12 @@ create_session(
 1. `list_sessions(mine=true, limit=100)` を引き、[runbook](../review-dialogue/runbook.md)「ラウンドの閉じ方」手順 1 の
    **「相手を引く」と同じ読み方**（保存ファイルに書き、`grep | jq` で、アーカイブ済みを除いて読む）で、既存の
    review-dialogue セッションが無いか確認する。**`tags` のフロー語では判定しない。**
-   `session_context.sources[0].git_repository.revision` が `claude/issue-<番号>` **そのもの**で、アーカイブ済みで
-   ない行を探す。`tags` の第 3 要素が偶然フロー語と同じ文字列になる（issue タイトルが `[review-dialogue] ...` 型等）と、
-   `tags` だけの判定では**自分自身を「既に走っている」と誤判定して払い出しをスキップしてしまう**。`revision` は
-   `source_revision` 引数からのみ埋まり、review-dialogue フローの払い出しだけがこれを渡すので、タグとの衝突に
-   影響されない。見つかったら払い出さず、既存のものに任せる —— 2 本走らせると往復の「相手を引く」で相手が 2 件
-   ヒットし、どちらも起こせなくなる。
+   `tags` に `issue-<番号>` を含み、アーカイブ済みでなく、**自分自身（環境変数 `CLAUDE_CODE_REMOTE_SESSION_ID`）
+   を除いた**行が 1 本以上あれば「既に走っている」とみなす。自分（修正側）も同じ `issue-<番号>` タグを持つので、
+   自分を除かないと自分自身を「既に走っている」と誤判定して払い出しをスキップしてしまう。
+   `session_context.sources[0].git_repository.revision` は `list_sessions` の行で欠ける（`null`）ことがあるため、
+   判定には使わない（複数残ったときの絞り込みにだけ使う）。見つかったら払い出さず、既存のものに任せる ——
+   2 本走らせると往復の「相手を引く」で相手が 2 件ヒットし、どちらも起こせなくなる。
 2. 見つからなければ、[上の「そのレビューを払い出す」呼び出し例](#呼び出し例)と**同じ引数**で `create_session` を
    自分で 1 回呼ぶ。`title` の issue タイトルと第 3 タグは、自分が最初に受け取った issue 番号から
    `mcp__github__issue_read` で取り直す。**[払い出す前の門](#払い出す前の門)は通し直さない** —— 実装の払い出しで
