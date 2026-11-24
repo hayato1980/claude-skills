@@ -88,6 +88,16 @@ mcp__claude-code-remote__list_sessions(mine=true, limit=100)
 - **`title` で突き合わせない。** 実データの title には `[tっd]` / `[codereview]` のような打ち間違いが現にある（tags 側は正しい）。title に寄せると、**間違った相手を起こしても手順上は成功に見える**。
 - **相手が引けないのは正常系**でもある（レビューがまだ払い出されていない、修正側がオーナーの手元セッションで `issue-<番号>` タグを持たない）。手順 2 を飛ばして 3 へ進む。
 
+#### list_events の保存ファイルの読み方
+
+他セッションの会話を読むときの `list_events` は、`kinds=["assistant","result"]` に絞っても上限を超えてファイルに落ちる。`list_sessions` と同じく `grep` で JSON 行を取り出す（行番号に頼らない）。assistant のテキストが時系列に並び、`result`（ターンの終わり方）は `[result <subtype> is_error=<真偽>] <最終テキスト>` の 1 行で出る：
+
+```bash
+grep '^ *{"ccr"' <保存されたファイル> | jq -r '.ccr.data[] | (.assistant.internal_anthropic_catchall.message.content[]? | select(.type=="text") | .text), (.result.internal_anthropic_catchall? // empty | "[result \(.subtype) is_error=\(.is_error)] \(.result)")'
+```
+
+結果がファイルに落ちずにそのまま返ってきたときは、その JSON を同じ条件で読めばよい。
+
 ### 2. 相手を起こす（ポーク）
 
 ```

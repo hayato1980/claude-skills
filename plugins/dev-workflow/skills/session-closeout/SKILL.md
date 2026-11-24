@@ -82,7 +82,7 @@ scripts/ci/session_closeout.sh <保存されたファイル（取得順）>... [
 mcp__claude-code-remote__list_events(session_id=<id>, kinds=["user", "assistant", "result"], limit=100)
 ```
 
-最後のユーザー指示から最終ターンまでを読み、足りなければ `before_id=<first_id>` で遡る。読み終えたら、次のどれかに当たるものを全部書き出す。
+結果がファイルに保存されたら [runbook](../review-dialogue/runbook.md#list_events-の保存ファイルの読み方) の 1 行で読む。最後のユーザー指示から最終ターンまでを読み、足りなければ `before_id=<first_id>` で遡る。読み終えたら、次のどれかに当たるものを全部書き出す。
 
 - **後続タスク**: 「次は○○が要る」「スコープ外として残した」「別 issue にすべき」
 - **知見**: 実測値、ハマりどころ、選ばなかった案とその理由
