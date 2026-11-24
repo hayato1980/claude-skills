@@ -72,23 +72,42 @@ def test_retro_closeout_can_read_list_events_dump_without_prompts() -> None:
 
 
 RUNBOOK = PLUGIN / "skills" / "review-dialogue" / "runbook.md"
-LIST_EVENTS_JQ = "select(.type==\"text\")"
+LIST_EVENTS_HEADING = "list_events の保存ファイルの読み方"
 
 
-def test_runbook_has_one_canonical_list_events_reader() -> None:
-    # list_sessions と同じく grep で JSON 行を取り出す。行番号（sed -n 3p）に頼らない（#27）。
+def heading_slugs(path: Path) -> set[str]:
+    """GitHub が見出しから作るアンカー（小文字・空白は -・句読点は除く）を集める。"""
+    slugs = set()
+    for line in path.read_text(encoding="utf-8").splitlines():
+        m = re.match(r"#{1,6}\s+(.*?)\s*$", line)
+        if m:
+            slugs.add(re.sub(r"[^\w\- ]", "", m.group(1).lower()).replace(" ", "-"))
+    return slugs
+
+
+def test_link_anchors_in_skills_and_runbook_resolve_to_headings() -> None:
+    link = re.compile(r"\]\((\.{1,2}/[^)#\s]+)#([^)\s]+)\)")
+    docs = [*(PLUGIN / "skills").glob("*/*.md"), *(REPO_ROOT / "docs").glob("**/*.md")]
+    broken = [
+        f"{doc.relative_to(REPO_ROOT)} -> {target}#{anchor}"
+        for doc in docs
+        for target, anchor in link.findall(doc.read_text(encoding="utf-8"))
+        if (doc.parent / target).suffix == ".md" and anchor not in heading_slugs((doc.parent / target).resolve())
+    ]
+    assert not broken, broken
+
+
+def test_runbook_list_events_command_prints_assistant_text_and_result() -> None:
+    # runbook が正準として置く 1 行を、保存ファイルの形をしたフィクスチャに対して実行する。
     text = RUNBOOK.read_text(encoding="utf-8")
-    assert text.count(LIST_EVENTS_JQ) == 1
-    assert "- **`list_events` の保存ファイルの読み方**" in text
-    assert "grep '^ *{\"ccr\"'" in text
-    assert "sed -n 3p" not in text
-
-
-@pytest.mark.parametrize("name", ["retro-closeout", "session-closeout"])
-def test_closeout_skills_reference_runbook_reader_instead_of_copying(name: str) -> None:
-    text = (PLUGIN / "skills" / name / "SKILL.md").read_text(encoding="utf-8")
-    assert "internal_anthropic_catchall" not in text
-    assert "review-dialogue/runbook.md#list_events-の保存ファイルの読み方" in text
+    section = text.split(f"#### {LIST_EVENTS_HEADING}", 1)[1]
+    command = section.split("```bash\n", 1)[1].split("\n```", 1)[0]
+    dump = Path(__file__).parent / "fixtures" / "list_events_dump.txt"
+    out = subprocess.run(
+        ["bash", "-c", command.replace("<保存されたファイル>", str(dump))],
+        capture_output=True, text=True, check=True,
+    ).stdout
+    assert out.splitlines() == ["first reply", "second reply", "[result success is_error=false] final text"]
 
 
 def test_scripts_are_executable_and_shellcheck_clean() -> None:

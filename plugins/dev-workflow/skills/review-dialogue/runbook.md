@@ -82,19 +82,21 @@ mcp__claude-code-remote__list_sessions(mine=true, limit=100)
   ```
 
   結果がファイルに落ちずにそのまま返ってきたときは、その JSON を同じ条件で読めばよい。
-- **`list_events` の保存ファイルの読み方**（他セッションの会話を読むとき。`kinds=["assistant","result"]` でも上限を超えてファイルに落ちる）。`list_sessions` と同じく `grep` で JSON 行を取り出す。assistant のテキストが時系列に並ぶ：
-
-  ```bash
-  grep '^ *{"ccr"' <保存されたファイル> | jq -r '.ccr.data[] | (.assistant.internal_anthropic_catchall.message.content[]? | select(.type=="text") | .text)'
-  ```
-
-  結果がファイルに落ちずにそのまま返ってきたときは、その JSON を同じ条件で読めばよい。
-
 - **`jq` が無いときは、黙って次へ進まない。** `command -v jq` で確かめ、無ければ「相手を引けなかった」を明示して手順 3 へ進み、チェックインの中で人へ渡す（`jq` 不在を「相手が 0 件」と取り違えると、往復が静かに止まる）。
 - **archive 済みはサーバー側では除けない。** `list_sessions` の引数は `mine` / `limit` / `after_id` / `before_id` / `tags` だけで、状態で絞る引数は無い。archive 済みは古い側にまとまっているわけでもない（新しい行の間にも挟まる）ので、「archive 済みが続いたら打ち切る」はできない。続きは `has_more` が true の間 `after_id=<last_id>` で取る。往復の相手はほぼ確実に直近のセッションなので、1 ページ目で当たる。
 - `list_sessions` の **`tags` 引数**は OAuth caller 専用で、子セッションからはエラーになる。**返ってきた JSON の `tags` を自分で突き合わせる。**
 - **`title` で突き合わせない。** 実データの title には `[tっd]` / `[codereview]` のような打ち間違いが現にある（tags 側は正しい）。title に寄せると、**間違った相手を起こしても手順上は成功に見える**。
 - **相手が引けないのは正常系**でもある（レビューがまだ払い出されていない、修正側がオーナーの手元セッションで `issue-<番号>` タグを持たない）。手順 2 を飛ばして 3 へ進む。
+
+#### list_events の保存ファイルの読み方
+
+他セッションの会話を読むときの `list_events` は、`kinds=["assistant","result"]` に絞っても上限を超えてファイルに落ちる。`list_sessions` と同じく `grep` で JSON 行を取り出す（行番号に頼らない）。assistant のテキストが時系列に並び、`result`（ターンの終わり方）は `[result <subtype> is_error=<真偽>] <最終テキスト>` の 1 行で出る：
+
+```bash
+grep '^ *{"ccr"' <保存されたファイル> | jq -r '.ccr.data[] | (.assistant.internal_anthropic_catchall.message.content[]? | select(.type=="text") | .text), (.result.internal_anthropic_catchall? // empty | "[result \(.subtype) is_error=\(.is_error)] \(.result)")'
+```
+
+結果がファイルに落ちずにそのまま返ってきたときは、その JSON を同じ条件で読めばよい。
 
 ### 2. 相手を起こす（ポーク）
 

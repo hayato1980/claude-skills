@@ -1,0 +1,4 @@
+Error: result exceeds maximum allowed tokens. Output has been saved to /tmp/x.txt
+Format: Plain text
+  {"ccr":{"data":[{"user":{"internal_anthropic_catchall":{"message":{"content":"hi"}}}},{"assistant":{"internal_anthropic_catchall":{"message":{"content":[{"type":"text","text":"first reply"},{"type":"tool_use","name":"Bash"}]}}}},{"assistant":{"internal_anthropic_catchall":{"message":{"content":[{"type":"text","text":"second reply"}]}}}},{"result":{"internal_anthropic_catchall":{"subtype":"success","is_error":false,"result":"final text"}}}],"has_more":false}}
+REQUIREMENTS FOR SUMMARIZATION
