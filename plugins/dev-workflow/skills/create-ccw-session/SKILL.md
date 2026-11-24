@@ -213,7 +213,7 @@ opus に残る語の例: `review-dialogue` / `grilling` / `grill-with-docs` / `d
 
 ### prompt に足さないもの
 
-``issue #<番号> に取り組む。Skill ツールで `<プラグイン名>:<フロー語>` を引数 `#<番号>` で発動する。`` の 1 文で完結する。issue 本文の要約・`gh` CLI が使えない旨・作業ブランチの
+上の表の `prompt` の形（1 文）で完結する。issue 本文の要約・`gh` CLI が使えない旨・作業ブランチの
 起点・draft PR の作り方は、いずれも**子セッション側で `CLAUDE.md` とハーネスが供給する**ので、prompt に重ねて
 書くと無効な指示が残るだけになる。
 
@@ -270,7 +270,7 @@ create_session(
 
 レビュー払い出しの要点:
 
-- **フロー語は `review-dialogue`。** プラグイン配布のスキルなので `prompt` は ``issue #<番号> に取り組む。Skill ツールで `dev-workflow:review-dialogue` を引数 `#<番号>` で発動する。``。
+- **フロー語は `review-dialogue`。** `prompt` は上の表の形で、スキル名は `dev-workflow:review-dialogue`（呼び出し例を参照）。
   `code-review` という語は**上流スキルの名前としてのみ残る**（器がその上流を内側で呼ぶ）。
 - `source_revision` に `claude/issue-<番号>` を渡す（実装済みブランチを起点にする）。**これを渡すのは
   `review-dialogue` フローだけ**で、`revision` は、同じ issue のセッションが複数あるときにレビュー側を見分けるのに使う（候補の取り方は `issue-<番号>` タグ + 自分の除外。→ [runbook](../review-dialogue/runbook.md)「ラウンドの閉じ方」手順 1）。

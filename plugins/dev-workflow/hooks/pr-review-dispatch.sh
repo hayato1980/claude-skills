@@ -11,8 +11,11 @@
 # `claude/issue-<N>` に push するので、フロー語・接頭辞の有無・prompt の文面（create_session は `/` で
 # 始まる prompt を拒む）に関係なく拾える。issue 番号は N。
 #   - head は PostToolUse 入力の `tool_input.head`（create_pull_request の引数）から読む。無ければ
-#     `tool_response`（作成された PR。オブジェクト・JSON 文字列・content ブロック列のいずれでも）の
-#     `head.ref` から読む。
+#     `tool_response`（作成された PR）の `head.ref` から読む。形はオブジェクト・JSON 文字列・content ブロック列・
+#     MCP の `{content:[{type:text,text:<PR の JSON>}]}` のいずれでも辿る。`owner:branch` 形の head は
+#     `owner:` を外して照合する。
+#   - どこからも head が取れなかったときは stderr に一言出して exit 0（fail-soft）。create_pull_request の
+#     応答が `{id,url}` 程度で `head.ref` を含まず、かつ `tool_input.head` も入らない実装だと拾えない。これが限界。
 #   - `dev-workflow:*` の器（review-dialogue 等）の除外は不要: レビュー側は push しないので PR を作らず、
 #     ふつうの直接作業はブランチ名が乱数（claude/<形容詞-名詞-hash>）になるので反応しない。
 #   - 失うもの: 直接セッションで最初にフローを打っても、head が claude/issue-<N> でなければ反応しない
@@ -32,9 +35,14 @@ head="$(printf '%s' "$input" | jq -r '
   def pr_head:
     if type == "string" then (try (fromjson | pr_head) catch empty)
     elif type == "array" then (.[]? | (.text? // empty) | pr_head)
-    elif type == "object" then (.head? | if type == "object" then .ref? elif type == "string" then . else empty end)
+    elif type == "object" then ((.head? | if type == "object" then .ref? elif type == "string" then . else empty end) // (.content? | pr_head))
     else empty end;
   (.tool_input.head? // empty) // ((.tool_response? // empty) | pr_head) // empty' 2>/dev/null)"
+if [ -z "$head" ]; then
+  echo "pr-review-dispatch: PostToolUse の入力から head ブランチを読めませんでした。claude/issue-<N> の PR を作ったなら、create-ccw-session スキルの「PR 作成後の自動レビュー払い出し」を手で実行してください。" >&2
+  exit 0
+fi
+head="${head#*:}"  # owner:branch 形の owner: を外す
 [[ "$head" =~ ^claude/issue-([0-9]+)$ ]] || exit 0
 issue="${BASH_REMATCH[1]}"
 

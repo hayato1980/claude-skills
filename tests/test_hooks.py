@@ -20,7 +20,7 @@ DISPATCH_HOOK = HOOKS / "pr-review-dispatch.sh"
 DENY_HOOK = HOOKS / "deny-mattpocock-implement.sh"
 
 
-def run_dispatch(head: str | None, *, env_path: str | None = None, raw: str | None = None,
+def run_dispatch(head: str | None, *, env_path: str | None = None, stdin_override: str | None = None,
                  tool_response: object | None = None) -> subprocess.CompletedProcess[str]:
     tool_input: dict[str, object] = {"owner": "o", "repo": "r", "title": "t", "base": "main"}
     if head is not None:
@@ -30,7 +30,7 @@ def run_dispatch(head: str | None, *, env_path: str | None = None, raw: str | No
     if tool_response is not None:
         payload["tool_response"] = tool_response
     env = {**os.environ, **({"PATH": env_path} if env_path is not None else {})}
-    return subprocess.run(["bash", str(DISPATCH_HOOK)], input=raw if raw is not None else json.dumps(payload),
+    return subprocess.run(["bash", str(DISPATCH_HOOK)], input=stdin_override if stdin_override is not None else json.dumps(payload),
                           capture_output=True, text=True, check=False, env=env)
 
 
@@ -67,6 +67,17 @@ class TestPrReviewDispatch:
         proc = run_dispatch(None, tool_response=resp)
         assert "claude/issue-89" in json.loads(proc.stdout)["hookSpecificOutput"]["additionalContext"]
 
+    def test_head_is_read_from_content_block_array(self) -> None:
+        resp = [{"type": "text", "text": json.dumps({"head": {"ref": "claude/issue-90"}})}]
+        proc = run_dispatch(None, tool_response=resp)
+        assert "claude/issue-90" in json.loads(proc.stdout)["hookSpecificOutput"]["additionalContext"]
+
+    def test_head_is_read_from_mcp_content_object(self) -> None:
+        # MCP ツールの結果の典型形: {"content":[{"type":"text","text":"<PR の JSON>"}]}
+        resp = {"content": [{"type": "text", "text": json.dumps({"head": {"ref": "claude/issue-91"}})}]}
+        proc = run_dispatch(None, tool_response=resp)
+        assert "claude/issue-91" in json.loads(proc.stdout)["hookSpecificOutput"]["additionalContext"]
+
     @pytest.mark.parametrize(
         "head",
         [
@@ -86,10 +97,19 @@ class TestPrReviewDispatch:
         proc = run_dispatch(None)
         assert (proc.returncode, proc.stdout.strip()) == (0, "")
 
-    @pytest.mark.parametrize("raw", ["", "not json", "[]"])
-    def test_unreadable_input_is_fail_soft(self, raw: str) -> None:
-        proc = run_dispatch(None, raw=raw)
+    @pytest.mark.parametrize("stdin_override", ["", "not json", "[]"])
+    def test_unreadable_input_is_fail_soft(self, stdin_override: str) -> None:
+        proc = run_dispatch(None, stdin_override=stdin_override)
         assert (proc.returncode, proc.stdout.strip()) == (0, "")
+
+    def test_no_head_anywhere_says_so_on_stderr(self) -> None:
+        proc = run_dispatch(None, tool_response={"id": 1, "url": "u"})
+        assert (proc.returncode, proc.stdout.strip()) == (0, "")
+        assert "head" in proc.stderr
+
+    def test_owner_prefixed_head_is_matched(self) -> None:
+        proc = run_dispatch("hayato1980:claude/issue-90")
+        assert "claude/issue-90" in json.loads(proc.stdout)["hookSpecificOutput"]["additionalContext"]
 
     def test_missing_jq_is_loud_not_silent(self, tmp_path: Path) -> None:
         # jq が無いのに黙って成功すると、この hook が防ぎたい「レビューが払い出されないまま止まる」が起きる。

@@ -1,6 +1,6 @@
 ---
 name: review-dialogue
-description: "払い出された `mattpocock-skills:code-review`（Standards / Spec の 2 軸レビュー）を包み、その所見を PR 上のスレッドへ着地させて修正側との往復を成立させるレビュー側の器。create-ccw-session のレビュー払い出しが `/dev-workflow:review-dialogue #NNN` で発動する。「#NNN のレビューを走らせて」でも発動。"
+description: "払い出された `mattpocock-skills:code-review`（Standards / Spec の 2 軸レビュー）を包み、その所見を PR 上のスレッドへ着地させて修正側との往復を成立させるレビュー側の器。create-ccw-session のレビュー払い出しが、prompt で Skill ツールにこのスキルを引数 `#NNN` で発動させる。「#NNN のレビューを走らせて」でも発動。"
 argument-hint: "#NNN"
 ---
 
@@ -10,7 +10,7 @@ Use this skill when: acting as the review side of a payout for issue #NNN. The u
 
 ## 発動トリガー
 
-- `/dev-workflow:review-dialogue #NNN`（`create-ccw-session` がレビュー払い出しの prompt としてこの形で呼ぶ → [`create-ccw-session`](../create-ccw-session/SKILL.md)「レビューの払い出し」）
+- Skill ツールで `dev-workflow:review-dialogue` を引数 `#NNN` で発動（`create-ccw-session` がレビュー払い出しの prompt で「Skill ツールで発動する」と指示する。`create_session` は `/` で始まる prompt を拒むので、スラッシュ形では呼ばれない → [`create-ccw-session`](../create-ccw-session/SKILL.md)「レビューの払い出し」）
 - 「#NNN を review-dialogue に出して」「#NNN のレビューを走らせて」
 
 このスキルは**レビュー側**として動く。往復の作法（ラウンドの閉じ方・相手が来ないとき・resolve と ready 化・マージがレビュー側の専権であること等）はすべて [`runbook.md`](./runbook.md) が正準。本 SKILL.md はそこへ二重に書かない。
