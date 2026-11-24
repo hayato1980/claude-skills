@@ -1,6 +1,7 @@
-"""CLI: `session_closeout.sh <list_sessions の結果ファイル（取得順）>... [--issue N ...] [--repo owner/repo]`。
+"""CLI: `session_closeout.sh <list_sessions の結果ファイル（取得順）>... [--session <get_session の結果ファイル>]... [--issue N ...] [--repo owner/repo]`。
 
-終了コード: 0 = 判定を出した / 2 = ページが足りない（次の `after_id` を stderr に出す）/ 1 = 入力・通信の失敗。
+終了コード: 0 = 判定を出した / 2 = ページが足りない（次の `after_id` を stderr に出す）/
+3 = list_sessions の行に session_context が無く、get_session での補完が要る（id を stderr に出す）/ 1 = 入力・通信の失敗。
 GitHub は環境の GH_TOKEN（無ければ GITHUB_TOKEN）で REST を直接読む（gh CLI には依存しない）。
 対象リポは `--repo`、無ければ `git remote origin`。呼び出しは各リポの中継スクリプト経由（許可ルールが固定パスを指すため）。
 """
@@ -19,11 +20,13 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
-from .bundles import Grouping, bucket_short, group, issue_branch, load_pages, next_after_id, repo_from_remote_url
+from .bundles import Grouping, bucket_short, fill_session_context, group, is_truncated, load_details, issue_branch, load_pages, next_after_id, repo_from_remote_url
 from .judge import IssueState, PullRequest, Verdict, judge
 
 _GH_API = "https://api.github.com"
 EXIT_INCOMPLETE = 2
+EXIT_NEEDS_CONTEXT = 3
+STOP_AFTER_ARCHIVED_PAGES = 2  # アーカイブ済みだけのページがこの枚数続いたら打ち切る（SKILL.md と一致させる）
 
 Fetch = Callable[[int], IssueState]
 
@@ -78,6 +81,8 @@ def _render_table(grouping: Grouping, states: dict[int, IssueState], verdicts: d
         lines.append(f"| #{n} | {v.kind} | {v.reason} | {st.state} | {pr_text} | {sess} |")
     lines.append("")
     lines.append(f"archive 済み（除外）: {grouping.archived} 件")
+    if grouping.truncated_after:
+        lines.append(f"打ち切り: archive 済みだけのページが {grouping.truncated_after} ページ続いたので、それ以降は引いていない")
     for s, reason in grouping.excluded:
         lines.append(f"対象外: {s.id} — {reason}")
     return "\n".join(lines)
@@ -97,6 +102,7 @@ def _render_json(grouping: Grouping, states: dict[int, IssueState], verdicts: di
             for n, sessions in grouping.bundles.items()
         ],
         "archived": grouping.archived,
+        "truncated_after_archived_pages": grouping.truncated_after,
         "excluded": [{"id": s.id, "reason": r} for s, r in grouping.excluded],
     }
     return json.dumps(out, ensure_ascii=False, indent=2)
@@ -115,6 +121,8 @@ def main(argv: list[str] | None = None, fetch: Fetch | None = None) -> int:
     ap.add_argument("--issue", type=int, action="append", help="対象を絞る issue 番号（複数可）")
     ap.add_argument("--self-id", default=_default_self_id(), help="除外する自分の session id（既定は環境変数から）")
     ap.add_argument("--repo", help="owner/repo（既定は git remote origin）")
+    ap.add_argument("--session", action="append", type=Path, default=[],
+                    help="get_session の結果ファイル（要補完の id ごとに 1 つ。複数可）")
     ap.add_argument("--format", choices=["table", "json"], default="table")
     args = ap.parse_args(argv)
 
@@ -126,16 +134,28 @@ def main(argv: list[str] | None = None, fetch: Fetch | None = None) -> int:
 
     try:
         pages = load_pages(args.pages)
-        after_id = next_after_id(pages)
+        after_id = next_after_id(pages)  # 順序の誤りはここで検出する
+        truncated = is_truncated(pages, STOP_AFTER_ARCHIVED_PAGES)
     except (OSError, ValueError) as e:
         print(f"結果ファイルを読めない: {e}", file=sys.stderr)
         return 1
-    if after_id is not None:
+    if after_id is not None and not truncated:
         print(f'ページが足りない: list_sessions(mine=true, limit=100, after_id="{after_id}") の結果を末尾に足す',
               file=sys.stderr)
         return EXIT_INCOMPLETE
 
-    grouping = group(pages, args.self_id, set(args.issue) if args.issue else None, repo)
+    try:
+        pages = fill_session_context(pages, load_details(args.session))
+    except (OSError, ValueError) as e:
+        print(f"結果ファイルを読めない: {e}", file=sys.stderr)
+        return 1
+    grouping = group(pages, args.self_id, set(args.issue) if args.issue else None, repo,
+                     truncated_after=STOP_AFTER_ARCHIVED_PAGES if truncated else None)
+    if grouping.needs_context:
+        ids = " ".join(s.id for s in grouping.needs_context)
+        print("list_sessions の行に session_context が無い。次の id を get_session で引き、"
+              f"保存された結果を --session で 1 つずつ足す: {ids}", file=sys.stderr)
+        return EXIT_NEEDS_CONTEXT
     states: dict[int, IssueState] = {}
     verdicts: dict[int, Verdict] = {}
     try:

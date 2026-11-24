@@ -32,10 +32,11 @@ mcp__claude-code-remote__list_sessions(mine=true, limit=100)   # 結果はファ
 ```
 
 ```bash
-scripts/ci/session_closeout.sh <保存されたファイル（取得順）>... [--issue NNN ...] [--repo owner/repo] [--format json]
+scripts/ci/session_closeout.sh <保存されたファイル（取得順）>... [--session <get_session の保存ファイル>]... [--issue NNN ...] [--repo owner/repo] [--format json]
 ```
 
-- **ファイルは取得した順に並べる。** 終了コード 2 はページ不足で、stderr に出た `after_id` で `list_sessions` を呼び足し、保存されたファイルを末尾に足して再実行する。全ページを取るのは、相手が直近のセッションに限らないため。最終ページ（`has_more=false`）が末尾以外にあると順序の誤りとして止まる。ただし**途中のページの抜けは検出できない**（ページの JSON は自分がどの `after_id` で引かれたかを持たない）ので、呼び足したファイルを飛ばさない
+- **ファイルは取得した順に並べる。** 終了コード 2 はページ不足で、stderr に出た `after_id` で `list_sessions` を呼び足し、保存されたファイルを末尾に足して再実行する。全ページを取るのは、相手が直近のセッションに限らないため。ただし**アーカイブ済みだけのページが 2 枚続いたら、そこで打ち切る**（一覧は新しい順で、実測では 3 ページ目以降が全件アーカイブ済み。数千件のアカウントで全ページを引かないため）。打ち切ったことは出力に「打ち切り: …」と出る（json は `truncated_after_archived_pages`）。枚数は固定（変える引数は無い）。空の最終ページを手で作って渡さない。最終ページ（`has_more=false`）が末尾以外にあると順序の誤りとして止まる。ただし**途中のページの抜けは検出できない**（ページの JSON は自分がどの `after_id` で引かれたかを持たない）ので、呼び足したファイルを飛ばさない
+- **`list_sessions` の行には `session_context` が無い**（リポジトリと revision は `get_session` にだけ載る。#31）。archive されていない `issue-<番号>` タグつきの行が `session_context` を持たないとき、スクリプトは終了コード 3 でその id を stderr に出して止まる。エージェントはその id だけ `get_session` を呼び、保存された結果を `--session <ファイル>` で 1 つずつ足して再実行する（件数は少ない）。役割（レビュー側 / 修正側）は、補完した `revision` が `claude/issue-<番号>` そのものかで決める。フロー語のタグでは決めない
 - 引数の issue 番号は `--issue` で渡す
 - 対象のリポは `git remote origin` から読む（`--repo owner/repo` で上書きできる）。読めなければ終了コード 1 で止まる
 - 出力は束ごとの 1 行（判定・理由・issue と PR の状態・セッションの役割と `status_bucket`）と、対象外にしたセッションの理由。この行を承認表（手順 5）の下書きにする
