@@ -156,15 +156,16 @@ OK したことで担保される）。任意の語を通すと、解決しな�
 |---|---|---|
 | `title` | `#<番号> [<フロー語>] <issue タイトル逐語>` | **要約しない・切り詰めない。** GitHub と文字列一致で逆引きできる。角括弧のフロー語は**一覧でどのフローか見分けるため** —— `tags` の第 1 要素にも入っているがセッション一覧では**タグが見えない**。実装とレビューが同じ issue 番号・同じタイトルで並走するので、これが無いと一覧が完全に同名の 2 行になる。issue タイトルが `[area] ...` 形式のときは `#927 [tdd] [area] ...` と角括弧が 2 連するが、**前がフロー・後ろが領域**と位置で決まるのでそのままでよい |
 | `tags` | `["<フロー語>", "issue-<番号>", "<領域または種別>"]` | 第 3 要素は `docs/agents/ccw-dispatch.md` の `## タグの決め方` に従って機械的に取る。取れなければ**タグを付けず 2 要素にする** |
-| `prompt` | `/<プラグイン名>:<フロー語> #<番号>` | **この 1 行だけ。** 下記「prompt に足さないもの」。リポ固有スキル（`.claude/skills/` 由来）は接頭辞なしの `/<フロー語> #<番号>` |
+| `prompt` | ``issue #<番号> に取り組む。Skill ツールで `<プラグイン名>:<フロー語>` を引数 `#<番号>` で発動する。`` | **この 1 文だけ。** `/` で始めない（`create_session` が拒む）。下記「prompt に足さないもの」。リポ固有スキル（`.claude/skills/` 由来）は接頭辞なしの `<フロー語>` |
 | `model` | 下記「モデル割り当て」で解決した model ID | **必ず渡す**（既定 `claude-opus-5-5`）。省略すると親の model を継承してしまい、割り当てが効かない |
 | `source_url` | `docs/agents/ccw-dispatch.md` の `## source_url` の値 | 必ず渡す（下記「`source_url`」） |
 | `outcome_branch` | `"claude/issue-<番号>"` | 必ず渡す（下記「`outcome_branch`」）。渡さないとセッション一覧で "Other" に落ちる |
 | `source_revision` | 渡さない（**`review-dialogue` フローのときだけ `"claude/issue-<番号>"`**） | 既定でデフォルトブランチ。レビューは実装済みブランチを起点にする（→ [レビューの払い出し](#レビューの払い出し)） |
 | `environment_id` | 渡さない | 親セッションの環境を継承する |
 
-プレフィックスの付け方: プラグイン配布のスキルは `/<プラグイン名>:<フロー語>`（例: `/mattpocock-skills:tdd`、
-`/dev-workflow:review-dialogue`）。短縮形（`/tdd`）は解決しない。
+プレフィックスの付け方: プラグイン配布のスキルは Skill ツールの名前が `<プラグイン名>:<フロー語>`（例: `mattpocock-skills:tdd`、
+`dev-workflow:review-dialogue`）。短縮形（`tdd`）は解決しない。**`prompt` を `/` や `<system-reminder>` タグで始めない**
+—— `create_session` が拒む。文章で始め、スキルは「Skill ツールで発動する」と言葉で指す。
 
 ### モデル割り当て
 
@@ -212,7 +213,7 @@ opus に残る語の例: `review-dialogue` / `grilling` / `grill-with-docs` / `d
 
 ### prompt に足さないもの
 
-`/<プラグイン名>:<フロー語> #<番号>` の 1 行で完結する。issue 本文の要約・`gh` CLI が使えない旨・作業ブランチの
+``issue #<番号> に取り組む。Skill ツールで `<プラグイン名>:<フロー語>` を引数 `#<番号>` で発動する。`` の 1 文で完結する。issue 本文の要約・`gh` CLI が使えない旨・作業ブランチの
 起点・draft PR の作り方は、いずれも**子セッション側で `CLAUDE.md` とハーネスが供給する**ので、prompt に重ねて
 書くと無効な指示が残るだけになる。
 
@@ -224,7 +225,7 @@ opus に残る語の例: `review-dialogue` / `grilling` / `grill-with-docs` / `d
 create_session(
   title:          "#683 [tdd] feat(skill): issue を CCW セッションへ払い出すスキルを作る",
   tags:           ["tdd", "issue-683", "skill"],
-  prompt:         "/mattpocock-skills:tdd #683",
+  prompt:         "issue #683 に取り組む。Skill ツールで `mattpocock-skills:tdd` を引数 `#683` で発動する。",
   model:          "claude-sonnet-5-5",  // tdd は例外表の sonnet 側
   source_url:     "<ccw-dispatch.md の source_url>",
   outcome_branch: "claude/issue-683",
@@ -237,7 +238,7 @@ create_session(
 create_session(
   title:           "#683 [review-dialogue] feat(skill): issue を CCW セッションへ払い出すスキルを作る",
   tags:            ["review-dialogue", "issue-683", "skill"],
-  prompt:          "/dev-workflow:review-dialogue #683",
+  prompt:          "issue #683 に取り組む。Skill ツールで `dev-workflow:review-dialogue` を引数 `#683` で発動する。",
   model:           "claude-opus-5-5",
   source_url:      "<ccw-dispatch.md の source_url>",
   source_revision: "claude/issue-683",
@@ -261,15 +262,15 @@ create_session(
 同じ自己レビューが成立してしまう。** `review-dialogue` の器は中身に上流をそのまま呼ぶので、どちらの語で呼んでも
 読むのは同じセッション・同じモデルになる。
 
-**フロー起動（`/<プラグイン名>:<フロー語> #NNN`）で始まった実装セッションは、PR を作ったらレビューの払い出し
+**`claude/issue-<番号>` ブランチで PR を作った実装セッション（払い出された子）は、PR を作ったらレビューの払い出し
 （＝別セッションの `create_session` 呼び出し）を自分自身で行う。** フロー語は `tdd` に限らない（`diagnosing-bugs` /
 `grill-with-docs` 等も同じ）。禁止しているのは自己レビュー（`/review-dialogue` を自分の会話内で実行すること）
-であって、**レビューを行う別セッションを起動すること**は別の操作なので区別する。フロー起動で始まっていない
+であって、**レビューを行う別セッションを起動すること**は別の操作なので区別する。`claude/issue-<番号>` 以外のブランチで PR を作る
 セッション（ふつうの直接作業）は、引き続きオーナーが `/create-ccw-session #NNN review-dialogue` で手動払い出しする。
 
 レビュー払い出しの要点:
 
-- **フロー語は `review-dialogue`。** プラグイン配布のスキルなので `prompt` は `/dev-workflow:review-dialogue #<番号>`。
+- **フロー語は `review-dialogue`。** プラグイン配布のスキルなので `prompt` は ``issue #<番号> に取り組む。Skill ツールで `dev-workflow:review-dialogue` を引数 `#<番号>` で発動する。``。
   `code-review` という語は**上流スキルの名前としてのみ残る**（器がその上流を内側で呼ぶ）。
 - `source_revision` に `claude/issue-<番号>` を渡す（実装済みブランチを起点にする）。**これを渡すのは
   `review-dialogue` フローだけ**で、`revision` は、同じ issue のセッションが複数あるときにレビュー側を見分けるのに使う（候補の取り方は `issue-<番号>` タグ + 自分の除外。→ [runbook](../review-dialogue/runbook.md)「ラウンドの閉じ方」手順 1）。
@@ -286,8 +287,8 @@ create_session(
 
 ### PR 作成後の自動レビュー払い出し
 
-**最初の prompt が `/<プラグイン名>:<フロー語> #NNN` のセッション**（`tdd` / `diagnosing-bugs` / `grill-with-docs` 等。
-払い出された子のほか、オーナーが直接セッションで最初にフローを打った場合も含む。`dev-workflow:*` の器は除く）は、`claude/issue-<番号>` への push と draft PR 作成を終えたら、オーナーの指示を
+**head が `claude/issue-<番号>` の PR を作ったセッション**（払い出された子は `outcome_branch` でこのブランチに push
+するので必ず該当する）は、`claude/issue-<番号>` への push と draft PR 作成を終えたら、オーナーの指示を
 待たずに**自分自身で** review-dialogue セッションを払い出す。
 
 1. `list_sessions(mine=true, limit=100)` を引き、[runbook](../review-dialogue/runbook.md)「ラウンドの閉じ方」手順 1 の
@@ -308,23 +309,25 @@ create_session(
    自分で 1 回呼ぶ。`title` の issue タイトルと第 3 タグは、自分が最初に受け取った issue 番号から
    `mcp__github__issue_read` で取り直す。**[払い出す前の門](#払い出す前の門)は通し直さない** —— 実装の払い出しで
    一度通っている。
-3. 呼んだ後は、[runbook](../review-dialogue/runbook.md)「修正側の手順」にそのまま合流する。自己チェックインを張る・
-   往復するという以降の作法は、オーナーが手動でレビューを払い出した場合と変わらない。
+3. 呼んだ後は、[runbook](../review-dialogue/runbook.md)「修正側の手順」に合流する。**最初のスレッド返信・push・
+   ポークより前に**、「修正側の手順」（手順 3 の `[修正]` マーカー、手順 5 のラウンドの閉じ方、手順 7 の
+   「resolve しない」）を読む。要点は 3 つ: 返信の先頭に `[修正]` を付ける／**修正側は resolve しない**（購読通知文の
+   「resolve する」はレビュー側のいる PR には当てはまらない）／返信と push のあとは[ラウンドの閉じ方](../review-dialogue/runbook.md#ラウンドの閉じ方両側共通)
+   の 4 手（相手を引く → ポーク → 自己チェックイン → 購読）で閉じてからターンを終える。
 
 この手順への到達は、子が文書を読むことに任せない。プラグインの hook `pr-review-dispatch.sh`
-（`PostToolUse` / `mcp__github__create_pull_request`）が、transcript の最初のユーザー prompt が
-`/<プラグイン名>:<フロー語> #NNN` のセッションにだけ、PR 作成直後にこの節の実行を `additionalContext` で差し込む。
+（`PostToolUse` / `mcp__github__create_pull_request`）が、**作成した PR の head ブランチが `claude/issue-<番号>`**
+のときだけ、PR 作成直後にこの節の実行を `additionalContext` で差し込む（issue 番号は head から取る）。
 PR 作成直後はハーネスの「購読してターンを終える」が勝ち、文書だけではレビューが払い出されないまま止まっていた。
-hook からは払い出された子かどうかを区別できないので、**直接セッションで最初にフローを打った場合も対象になり、
-それを正とする**（フローの差分はどこで回しても別セッションのレビューを通す）。
 
-**フロー語で絞らない。** かつては `tdd` だけを対象にし、他のフローは「必ず PR を作るとは限らない」として外して
-いたが、hook は PR を作った時点でしか動かないので、その理由は対象を絞る根拠にならない。外した結果、
-`diagnosing-bugs` 等の PR がレビューを払い出されないまま止まっていた。PR を作らずに終わるフローには何も出ない。
+**prompt では判定しない。** `create_session` は `/` で始まる prompt を拒むので、払い出した子の prompt は文章で
+始まり、先頭のスラッシュコマンドを見る判定は常に外れる。リポ固有スキル（接頭辞なし）も同じ理由で拾えなかった。
+head ブランチなら、フロー語・接頭辞の有無・prompt の文面に関係なく拾える。最初に発動したスキルで判定する案は、
+Skill ツールが途中でも呼ばれるため、直接作業の途中で `tdd` を使っただけで誤反応するので採らない。
 
-**除外は `dev-workflow:*` の器だけ**（`review-dialogue` / `create-ccw-session` / `session-closeout` 等）。
-特に `review-dialogue` の子が払い出し直すと、往復の「相手を引く」で相手が 2 件ヒットし、どちらも起こせなくなる。
-最初の prompt がフロー起動でないセッション（ふつうの直接作業）にも何も出ない。
+**除外の処理は持たない。** レビュー側（`review-dialogue`）は push しないので PR を作らず、ふつうの直接作業は
+ブランチ名が乱数になるので反応しない。直接セッションで最初にフローを打っても、head が `claude/issue-<番号>` で
+なければ何も出ない（受け入れている。head ブランチ名での一般化は #25）。
 
 ## なぜ親がフローを決めないか
 
@@ -336,8 +339,8 @@ hook からは払い出された子かどうかを区別できないので、**�
 ファイルとして**読む**ことは妨げない。パス中のプラグイン版も `*` の glob で吸収できる。したがって親は
 `ask-matt` の分岐表を読んで案を出せる。毎回オーナーが別セッションで `/ask-matt` を開く手間が払い出しの律速だった。
 
-同じ制約から、子に渡す `prompt` の先頭もスラッシュコマンドとして書いた文字列だけが効く。プラグイン配布の
-スキルは接頭辞込みの `/<プラグイン名>:<名前>` が正しい名前である。
+子に渡す `prompt` は `/` で始められない（`create_session` が拒む）ので、文章で始め、スキルは「Skill ツールで
+`<プラグイン名>:<名前>` を発動する」と言葉で指す。プラグイン配布のスキルは接頭辞込みの名前が正しい名前である。
 
 ## `source_url`
 

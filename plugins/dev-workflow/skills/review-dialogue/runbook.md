@@ -291,11 +291,11 @@ ready 化 → CI 完了待ち → green ならマージ、を 1 本で行う（�
 
 ## 修正側の手順
 
-### 1. 最初の prompt がフロー起動なら、まずレビューを自分で払い出す
+### 1. head が `claude/issue-<番号>` の PR を作ったら、まずレビューを自分で払い出す
 
-**最初に受け取ったプロンプトが `/<プラグイン名>:<フロー語> #<番号>` だったセッション**（`tdd` / `diagnosing-bugs` / `grill-with-docs` 等。`create-ccw-session` で払い出された子のほか、オーナーが直接セッションで最初にフローを打った場合も含む。`dev-workflow:*` の器は除く）は、draft PR を作成した直後に、自分自身で review-dialogue セッションを払い出す（手順は [`create-ccw-session`](../create-ccw-session/SKILL.md)「PR 作成後の自動レビュー払い出し」。プラグインの hook が PR 作成直後にこれを思い出させる）。
+**head が `claude/issue-<番号>` の PR を作ったセッション**（`tdd` / `diagnosing-bugs` / `grill-with-docs` 等。`create-ccw-session` で払い出された子は `outcome_branch` でこのブランチに push するので必ず該当する）は、draft PR を作成した直後に、自分自身で review-dialogue セッションを払い出す（手順は [`create-ccw-session`](../create-ccw-session/SKILL.md)「PR 作成後の自動レビュー払い出し」。プラグインの hook が PR 作成直後にこれを思い出させる）。
 
-**それ以外の修正側はこの手順を飛ばす** —— 最初の prompt がフロー起動でないセッション（ふつうの直接作業）はレビューを自分で払い出さない。hook から「払い出された子か」は区別できないので、線は「最初の prompt がフロー起動か」で引く。レビューは引き続きオーナーが `/create-ccw-session #NNN review-dialogue` で別途払い出す。
+**それ以外の修正側はこの手順を飛ばす** —— head が `claude/issue-<番号>` でないセッション（ふつうの直接作業）はレビューを自分で払い出さない。線は prompt ではなく head ブランチで引く（`create_session` は `/` で始まる prompt を拒むので、prompt の文面は当てにならない）。レビューは引き続きオーナーが `/create-ccw-session #NNN review-dialogue` で別途払い出す。
 
 ### 2. PR を作ったら必ず自己チェックインを張る
 
@@ -315,6 +315,8 @@ mcp__github__add_reply_to_pull_request_comment(owner, repo, pullNumber, commentI
 ```
 
 `commentId` は**数値の comment ID**（`#discussion_r...` アンカーの番号）。resolve に使う `PRRT_...` の node ID とは別物。
+
+返信と push が済んだら、**閉じ忘れない**: [手順 5 ラウンドを閉じる](#5-ラウンドを閉じる)へ進む（相手を引く → ポーク → 自己チェックイン → 購読）。**修正側は resolve しない**（[手順 7](#7-やらないこと)）。
 
 ### 4. CI 赤・マージコンフリクトを自分で直す
 

@@ -1,6 +1,6 @@
 """プラグインの hook 2 本と hooks.json の検証。
 
-- pr-review-dispatch.sh: 最初の prompt がフロー起動（dev-workflow の器以外）のセッションにだけ、PR 作成直後にレビュー払い出しを促す。
+- pr-review-dispatch.sh: 作成した PR の head が claude/issue-<N> のときだけ、PR 作成直後にレビュー払い出しを促す。
 - deny-mattpocock-implement.sh: 対象リポの docs/agents/dev-workflow.md で有効にしたときだけ /implement を止める。
 """
 
@@ -20,74 +20,75 @@ DISPATCH_HOOK = HOOKS / "pr-review-dispatch.sh"
 DENY_HOOK = HOOKS / "deny-mattpocock-implement.sh"
 
 
-def transcript(tmp_path: Path, first_prompt: str, *, as_command_tag: str | None = None) -> Path:
-    if as_command_tag:
-        first_prompt = (
-            f"<command-message>{as_command_tag}</command-message>\n"
-            f"<command-name>/{as_command_tag}</command-name>\n"
-            f"<command-args>{first_prompt}</command-args>"
-        )
-    entries = [
-        {"type": "user", "message": {"role": "user", "content": first_prompt}},
-        {"type": "assistant", "message": {"role": "assistant", "content": []}},
-        {"type": "user", "message": {"role": "user", "content": [{"type": "text", "text": "後続"}]}},
-    ]
-    path = tmp_path / "t.jsonl"
-    path.write_text("\n".join(json.dumps(e, ensure_ascii=False) for e in entries) + "\n")
-    return path
-
-
-def run_dispatch(path: Path | None, *, env_path: str | None = None) -> subprocess.CompletedProcess[str]:
-    payload = {"hook_event_name": "PostToolUse", "tool_name": "mcp__github__create_pull_request",
-               "transcript_path": str(path) if path else ""}
+def run_dispatch(head: str | None, *, env_path: str | None = None, raw: str | None = None,
+                 tool_response: object | None = None) -> subprocess.CompletedProcess[str]:
+    tool_input: dict[str, object] = {"owner": "o", "repo": "r", "title": "t", "base": "main"}
+    if head is not None:
+        tool_input["head"] = head
+    payload: dict[str, object] = {"hook_event_name": "PostToolUse", "tool_name": "mcp__github__create_pull_request",
+                                  "tool_input": tool_input}
+    if tool_response is not None:
+        payload["tool_response"] = tool_response
     env = {**os.environ, **({"PATH": env_path} if env_path is not None else {})}
-    return subprocess.run(["bash", str(DISPATCH_HOOK)], input=json.dumps(payload), capture_output=True, text=True, check=False, env=env)
+    return subprocess.run(["bash", str(DISPATCH_HOOK)], input=raw if raw is not None else json.dumps(payload),
+                          capture_output=True, text=True, check=False, env=env)
 
 
 class TestPrReviewDispatch:
-    @pytest.mark.parametrize("flow", ["mattpocock-skills:tdd", "mattpocock-skills:diagnosing-bugs", "mattpocock-skills:grill-with-docs"])
-    def test_flow_session_gets_the_dispatch_reminder(self, tmp_path: Path, flow: str) -> None:
-        proc = run_dispatch(transcript(tmp_path, f"/{flow} #1429"))
+    """判定は prompt ではなく、作成した PR の head ブランチ（claude/issue-<N>）で行う。"""
+
+    def test_issue_branch_gets_the_dispatch_reminder(self) -> None:
+        proc = run_dispatch("claude/issue-1429")
         assert proc.returncode == 0
         out = json.loads(proc.stdout)["hookSpecificOutput"]
         assert out["hookEventName"] == "PostToolUse"
         ctx = out["additionalContext"]
-        assert f"/{flow} で始まった" in ctx
         assert "PR 作成後の自動レビュー払い出し" in ctx
         assert "create-ccw-session" in ctx
         assert "#1429" in ctx and "claude/issue-1429" in ctx
         assert "/code-review は回さない" in ctx
 
-    @pytest.mark.parametrize("flow", ["mattpocock-skills:tdd", "mattpocock-skills:diagnosing-bugs"])
-    def test_command_tag_form_also_matches(self, tmp_path: Path, flow: str) -> None:
-        proc = run_dispatch(transcript(tmp_path, "#88", as_command_tag=flow))
+    def test_reminder_pins_the_fixer_side_wording(self) -> None:
+        # #32: 最初の返信の前に runbook の修正側の手順を読む。要点 3 つは本文にも書く。
+        ctx = json.loads(run_dispatch("claude/issue-7").stdout)["hookSpecificOutput"]["additionalContext"]
+        assert "最初のスレッド返信・push・ポークより前に" in ctx
+        assert "修正側の手順" in ctx and "ラウンドの閉じ方" in ctx
+        assert "[修正]" in ctx
+        assert "resolve しない" in ctx
+        assert "相手を引く" in ctx and "ポーク" in ctx and "自己チェックイン" in ctx and "購読" in ctx
+
+    def test_head_is_read_from_tool_response_when_tool_input_has_none(self) -> None:
+        resp = {"head": {"ref": "claude/issue-88"}}
+        proc = run_dispatch(None, tool_response=resp)
         assert "claude/issue-88" in json.loads(proc.stdout)["hookSpecificOutput"]["additionalContext"]
 
+    def test_head_is_read_from_stringified_tool_response(self) -> None:
+        resp = json.dumps({"head": {"ref": "claude/issue-89"}})
+        proc = run_dispatch(None, tool_response=resp)
+        assert "claude/issue-89" in json.loads(proc.stdout)["hookSpecificOutput"]["additionalContext"]
+
     @pytest.mark.parametrize(
-        "prompt",
+        "head",
         [
-            "この Issue を直して",
-            "/review-dialogue #1429",
-            "/dev-workflow:review-dialogue #1429",
-            "/dev-workflow:create-ccw-session #1429 tdd",
-            "/dev-workflow:session-closeout #1429",
-            "/mattpocock-skills:code-review",
-            "メモ: /mattpocock-skills:tdd #1429 を使う予定",
+            "claude/happy-fox-1a2b3c",
+            "claude/issue-",
+            "claude/issue-12-extra",
+            "feature/claude/issue-12",
+            "main",
+            "",
         ],
     )
-    def test_other_sessions_get_nothing(self, tmp_path: Path, prompt: str) -> None:
-        proc = run_dispatch(transcript(tmp_path, prompt))
+    def test_other_heads_get_nothing(self, head: str) -> None:
+        proc = run_dispatch(head)
         assert (proc.returncode, proc.stdout.strip()) == (0, "")
 
-    def test_review_dialogue_command_tag_form_gets_nothing(self, tmp_path: Path) -> None:
-        # レビュー側の子が払い出し直すと、往復の「相手を引く」で相手が 2 件になる。
-        proc = run_dispatch(transcript(tmp_path, "#1429", as_command_tag="dev-workflow:review-dialogue"))
+    def test_no_head_anywhere_gets_nothing(self) -> None:
+        proc = run_dispatch(None)
         assert (proc.returncode, proc.stdout.strip()) == (0, "")
 
-    @pytest.mark.parametrize("kind", ["unset", "nonexistent"])
-    def test_unreadable_transcript_is_fail_soft(self, tmp_path: Path, kind: str) -> None:
-        path = None if kind == "unset" else tmp_path / "nope.jsonl"
-        proc = run_dispatch(path)
+    @pytest.mark.parametrize("raw", ["", "not json", "[]"])
+    def test_unreadable_input_is_fail_soft(self, raw: str) -> None:
+        proc = run_dispatch(None, raw=raw)
         assert (proc.returncode, proc.stdout.strip()) == (0, "")
 
     def test_missing_jq_is_loud_not_silent(self, tmp_path: Path) -> None:
@@ -98,7 +99,7 @@ class TestPrReviewDispatch:
             found = shutil.which(tool)
             assert found
             (bindir / tool).symlink_to(found)
-        proc = run_dispatch(transcript(tmp_path, "/mattpocock-skills:tdd #1"), env_path=str(bindir))
+        proc = run_dispatch("claude/issue-1", env_path=str(bindir))
         assert proc.returncode == 1
         assert "jq" in proc.stderr
         assert proc.stdout.strip() == ""
