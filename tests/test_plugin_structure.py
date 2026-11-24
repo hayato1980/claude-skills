@@ -64,6 +64,33 @@ def test_issue_inventory_carries_its_own_write_permissions() -> None:
         assert tool in tools, tool
 
 
+def test_retro_closeout_can_read_list_events_dump_without_prompts() -> None:
+    # list_events の保存ファイルは grep + jq で読む。許可が無いと毎回プロンプトが出る（#27）。
+    tools = frontmatter(PLUGIN / "skills" / "retro-closeout" / "SKILL.md")["allowed-tools"]
+    for tool in ("Bash(grep:*)", "Bash(jq:*)"):
+        assert tool in tools, tool
+
+
+RUNBOOK = PLUGIN / "skills" / "review-dialogue" / "runbook.md"
+LIST_EVENTS_JQ = "select(.type==\"text\")"
+
+
+def test_runbook_has_one_canonical_list_events_reader() -> None:
+    # list_sessions と同じく grep で JSON 行を取り出す。行番号（sed -n 3p）に頼らない（#27）。
+    text = RUNBOOK.read_text(encoding="utf-8")
+    assert text.count(LIST_EVENTS_JQ) == 1
+    assert "- **`list_events` の保存ファイルの読み方**" in text
+    assert "grep '^ *{\"ccr\"'" in text
+    assert "sed -n 3p" not in text
+
+
+@pytest.mark.parametrize("name", ["retro-closeout", "session-closeout"])
+def test_closeout_skills_reference_runbook_reader_instead_of_copying(name: str) -> None:
+    text = (PLUGIN / "skills" / name / "SKILL.md").read_text(encoding="utf-8")
+    assert "internal_anthropic_catchall" not in text
+    assert "review-dialogue/runbook.md#list_events-の保存ファイルの読み方" in text
+
+
 def test_scripts_are_executable_and_shellcheck_clean() -> None:
     targets = [*SCRIPTS.glob("*.sh"), *(PLUGIN / "hooks").glob("*.sh"), *TEMPLATES.glob("*.sh")]
     assert len(targets) == 11
