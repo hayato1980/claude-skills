@@ -143,10 +143,15 @@ class TestCompletionFromGetSession:
     """list_sessions の行に session_context が無いとき、get_session の結果で補う（#31）。"""
 
     def _rows(self) -> list[dict[str, Any]]:
-        rows = [_row("impl", ["tdd", "issue-7"]), _row("rev", ["review-dialogue", "issue-7"])]
-        for r in rows:
-            del r["session_context"]
-        return rows
+        # issue #31 に書かれた、list_sessions の行の実測のキー集合（session_context 無し）。
+        return [
+            {"created_at": "2026-11-20T00:00:00Z", "environment_kind": "anthropic_cloud", "id": sid,
+             "origin": "claude_code_mcp_seed", "parent_session_id": "session_parent",
+             "post_turn_summary": {"recent_action": "x", "needs_action": False},
+             "session_status": "SESSION_STATUS_IDLE", "status_bucket": "SESSION_STATUS_BUCKET_COMPLETED",
+             "tags": tags, "task_summary": "x", "title": sid, "unread": False, "updated_at": "2026-11-21T00:00:00Z"}
+            for sid, tags in (("impl", ["tdd", "issue-7"]), ("rev", ["review-dialogue", "issue-7"]))
+        ]
 
     def _detail(self, tmp_path: Path, sid: str, revision: str | None) -> Path:
         repo: dict[str, Any] = {"url": "https://github.com/acme/widgets"}

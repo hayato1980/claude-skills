@@ -143,18 +143,16 @@ def is_truncated(pages: list[Page], stop_after: int | None = None) -> bool:
     return all(p.sessions and all(s.status == ARCHIVED for s in p.sessions) for p in pages[-stop_after:])
 
 
-def next_after_id(pages: list[Page], stop_after: int | None = None) -> str | None:
+def next_after_id(pages: list[Page]) -> str | None:
     """取得順に渡されたページが揃っていれば None、続きがあれば次に渡す `after_id` を返す。
 
     ページの JSON は自分がどの `after_id` で引かれたかを持たないので、途中のページの抜けは検出できない。
     検出できるのは順序の崩れ（最終ページが末尾に無い）だけで、それは ValueError にする。
-    `stop_after` 枚続けてアーカイブ済みだけのページが来たら、続きがあっても None を返す（`is_truncated`）。
+    打ち切るかどうかは `is_truncated` が別に決める（呼び出し側が 1 回だけ判定する）。
     """
     for i, page in enumerate(pages[:-1]):
         if not page.has_more:
             raise ValueError(f"{i + 1} 枚目が最終ページ（has_more=false）なのに後ろにページがある。取得順に渡す")
-    if is_truncated(pages, stop_after):
-        return None
     return pages[-1].last_id if pages[-1].has_more else None
 
 
@@ -212,7 +210,8 @@ class Grouping:
     truncated_after: int | None = None  # 打ち切ったとき、続けて読んだアーカイブ済みだけのページ数
 
 
-def group(pages: list[Page], self_id: str | None, issues: set[int] | None, repo: str) -> Grouping:
+def group(pages: list[Page], self_id: str | None, issues: set[int] | None, repo: str,
+          truncated_after: int | None = None) -> Grouping:
     """archive 済み・自分・別リポのセッションを除き、`issue-<番号>` タグで束ねる。同じ id は 1 回だけ数える。"""
     bundles: dict[int, list[Session]] = {}
     excluded: list[tuple[Session, str]] = []
@@ -247,4 +246,5 @@ def group(pages: list[Page], self_id: str | None, issues: set[int] | None, repo:
                 continue
             for n in targets:
                 bundles.setdefault(n, []).append(s)
-    return Grouping(bundles=dict(sorted(bundles.items())), excluded=excluded, archived=archived, needs_context=needs_context)
+    return Grouping(bundles=dict(sorted(bundles.items())), excluded=excluded, archived=archived, needs_context=needs_context,
+                    truncated_after=truncated_after)

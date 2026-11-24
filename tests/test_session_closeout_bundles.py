@@ -201,9 +201,13 @@ class TestRepoFromRemoteUrl:
 
 def _list_row(sid: str, *, tags: list[str], status: str = "SESSION_STATUS_IDLE") -> dict[str, Any]:
     """実測の list_sessions の行（session_context が無い。#31）。"""
-    row = _row(sid, tags=tags, status=status)
-    del row["session_context"]
-    return row
+    return {
+        "created_at": "2026-11-20T00:00:00Z", "environment_kind": "anthropic_cloud", "id": sid,
+        "origin": "claude_code_mcp_seed", "parent_session_id": "session_parent",
+        "post_turn_summary": {"recent_action": "x", "needs_action": False}, "session_status": status,
+        "status_bucket": "SESSION_STATUS_BUCKET_COMPLETED", "tags": tags, "task_summary": "x", "title": sid,
+        "unread": False, "updated_at": "2026-11-21T00:00:00Z",
+    }
 
 
 class TestRowWithoutSessionContext:
@@ -230,26 +234,23 @@ class TestStopAfterArchivedPages:
 
     def test_stops_after_k_trailing_all_archived_pages(self) -> None:
         pages = [self._live("a"), self._archived("b"), self._archived("c")]
-        assert next_after_id(pages, stop_after=2) is None
         assert is_truncated(pages, stop_after=2) is True
 
     def test_keeps_asking_before_k_pages(self) -> None:
         pages = [self._live("a"), self._archived("b")]
-        assert next_after_id(pages, stop_after=2) == "b"
         assert is_truncated(pages, stop_after=2) is False
 
     def test_a_live_page_resets_the_run(self) -> None:
         pages = [self._archived("a"), self._live("b")]
-        assert next_after_id(pages, stop_after=2) == "b"
+        assert is_truncated(pages, stop_after=2) is False
 
     def test_complete_listing_is_not_reported_as_truncated(self) -> None:
         pages = [self._archived("a"), self._archived("b", has_more=False)]
-        assert next_after_id(pages, stop_after=2) is None
         assert is_truncated(pages, stop_after=2) is False
 
     def test_default_never_truncates(self) -> None:
         pages = [self._archived("a"), self._archived("b"), self._archived("c")]
-        assert next_after_id(pages) == "c"
+        assert is_truncated(pages) is False
 
 
 class TestIssueFilterWithoutSessionContext:

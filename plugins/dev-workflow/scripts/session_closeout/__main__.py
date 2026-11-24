@@ -134,11 +134,12 @@ def main(argv: list[str] | None = None, fetch: Fetch | None = None) -> int:
 
     try:
         pages = load_pages(args.pages)
-        after_id = next_after_id(pages, STOP_AFTER_ARCHIVED_PAGES)
+        after_id = next_after_id(pages)  # 順序の誤りはここで検出する
+        truncated = is_truncated(pages, STOP_AFTER_ARCHIVED_PAGES)
     except (OSError, ValueError) as e:
         print(f"結果ファイルを読めない: {e}", file=sys.stderr)
         return 1
-    if after_id is not None:
+    if after_id is not None and not truncated:
         print(f'ページが足りない: list_sessions(mine=true, limit=100, after_id="{after_id}") の結果を末尾に足す',
               file=sys.stderr)
         return EXIT_INCOMPLETE
@@ -148,9 +149,8 @@ def main(argv: list[str] | None = None, fetch: Fetch | None = None) -> int:
     except (OSError, ValueError) as e:
         print(f"結果ファイルを読めない: {e}", file=sys.stderr)
         return 1
-    grouping = group(pages, args.self_id, set(args.issue) if args.issue else None, repo)
-    if is_truncated(pages, STOP_AFTER_ARCHIVED_PAGES):
-        grouping.truncated_after = STOP_AFTER_ARCHIVED_PAGES
+    grouping = group(pages, args.self_id, set(args.issue) if args.issue else None, repo,
+                     truncated_after=STOP_AFTER_ARCHIVED_PAGES if truncated else None)
     if grouping.needs_context:
         ids = " ".join(s.id for s in grouping.needs_context)
         print("list_sessions の行に session_context が無い。次の id を get_session で引き、"
