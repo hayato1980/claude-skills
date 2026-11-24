@@ -14,7 +14,7 @@ from typing import Any
 
 import pytest
 
-from session_closeout.__main__ import EXIT_INCOMPLETE, main
+from session_closeout.__main__ import EXIT_INCOMPLETE, EXIT_NEEDS_CONTEXT, main
 from session_closeout.judge import IssueState, PullRequest
 
 
@@ -137,3 +137,63 @@ def test_repo_root_env_selects_the_repo_regardless_of_cwd(
     page = _write(tmp_path, "p", [_row("impl", ["issue-7"])], has_more=False, last_id="impl")
     assert main([str(page)], fetch=_merged) == 0
     assert "| #7 |" in capsys.readouterr().out
+
+
+class TestCompletionFromGetSession:
+    """list_sessions の行に session_context が無いとき、get_session の結果で補う（#31）。"""
+
+    def _rows(self) -> list[dict[str, Any]]:
+        rows = [_row("impl", ["tdd", "issue-7"]), _row("rev", ["review-dialogue", "issue-7"])]
+        for r in rows:
+            del r["session_context"]
+        return rows
+
+    def _detail(self, tmp_path: Path, sid: str, revision: str | None) -> Path:
+        repo: dict[str, Any] = {"url": "https://github.com/acme/widgets"}
+        if revision:
+            repo["revision"] = revision
+        p = tmp_path / f"detail_{sid}.json"
+        p.write_text(json.dumps({"ccr": {"id": sid, "session_context": {"sources": [{"git_repository": repo}]}}}),
+                     encoding="utf-8")
+        return p
+
+    def test_asks_for_get_session_on_the_ids_that_need_it(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        page = _write(tmp_path, "p", self._rows(), has_more=False, last_id="rev")
+        assert main(["--repo", REPO, str(page)], fetch=_merged) == EXIT_NEEDS_CONTEXT
+        err = capsys.readouterr().err
+        assert "get_session" in err and "impl" in err and "rev" in err and "--session" in err
+
+    def test_bundles_with_role_from_the_completed_revision(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        page = _write(tmp_path, "p", self._rows(), has_more=False, last_id="rev")
+        d1, d2 = self._detail(tmp_path, "impl", None), self._detail(tmp_path, "rev", "claude/issue-7")
+        assert main(["--repo", REPO, "--session", str(d1), "--session", str(d2), str(page)], fetch=_merged) == 0
+        out = capsys.readouterr().out
+        assert "impl（修正側" in out and "rev（レビュー側" in out
+        assert "対象外" not in out
+
+    def test_partial_completion_still_asks_for_the_rest(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        page = _write(tmp_path, "p", self._rows(), has_more=False, last_id="rev")
+        d1 = self._detail(tmp_path, "impl", None)
+        assert main(["--repo", REPO, "--session", str(d1), str(page)], fetch=_merged) == EXIT_NEEDS_CONTEXT
+        err = capsys.readouterr().err
+        assert "rev" in err and "impl" not in err.split("--session")[0]
+
+
+class TestTruncation:
+    def _archived_page(self, tmp_path: Path, name: str) -> Path:
+        row = {**_row(name, ["issue-1"]), "session_status": "SESSION_STATUS_ARCHIVED"}
+        return _write(tmp_path, name, [row], has_more=True, last_id=name)
+
+    def test_truncates_explicitly_instead_of_asking_for_more(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        pages = [str(self._archived_page(tmp_path, n)) for n in ("p1", "p2")]
+        assert main(["--repo", REPO, "--stop-after-archived-pages", "2", *pages], fetch=_merged) == 0
+        out = capsys.readouterr().out
+        assert "打ち切り" in out and "2 ページ" in out
+
+    def test_default_k_is_documented_value(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        pages = [str(self._archived_page(tmp_path, n)) for n in ("p1", "p2")]
+        assert main(["--repo", REPO, *pages], fetch=_merged) == 0
+        assert "打ち切り" in capsys.readouterr().out
+
+    def test_without_enough_archived_pages_still_incomplete(self, tmp_path: Path) -> None:
+        assert main(["--repo", REPO, str(self._archived_page(tmp_path, "p1"))], fetch=_merged) == EXIT_INCOMPLETE

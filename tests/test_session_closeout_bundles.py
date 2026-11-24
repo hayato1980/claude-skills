@@ -13,7 +13,7 @@ from typing import Any
 
 import pytest
 
-from session_closeout.bundles import ARCHIVED, group, next_after_id, parse_page, repo_from_remote_url
+from session_closeout.bundles import ARCHIVED, group, is_truncated, next_after_id, parse_page, repo_from_remote_url
 
 REPO = "acme/widgets"
 
@@ -197,3 +197,56 @@ class TestRepoFromRemoteUrl:
     def test_unreadable_url_names_the_url(self) -> None:
         with pytest.raises(ValueError, match="widgets-only"):
             repo_from_remote_url("widgets-only")
+
+
+def _list_row(sid: str, *, tags: list[str], status: str = "SESSION_STATUS_IDLE") -> dict[str, Any]:
+    """実測の list_sessions の行（session_context が無い。#31）。"""
+    row = _row(sid, tags=tags, status=status)
+    del row["session_context"]
+    return row
+
+
+class TestRowWithoutSessionContext:
+    def test_live_tagged_row_is_not_excluded_but_asks_for_completion(self) -> None:
+        g = group([parse_page(_page_json([_list_row("s1", tags=["tdd", "issue-31"])]))], None, None, REPO)
+        assert g.excluded == []
+        assert g.bundles == {}
+        assert [s.id for s in g.needs_context] == ["s1"]
+
+    def test_archived_or_untagged_rows_do_not_ask_for_completion(self) -> None:
+        rows = [_list_row("old", tags=["issue-1"], status=ARCHIVED), _list_row("hand", tags=[])]
+        g = group([parse_page(_page_json(rows))], None, None, REPO)
+        assert g.needs_context == []
+
+
+class TestStopAfterArchivedPages:
+    """アーカイブ済みだけのページが続いたら、続きを引かずに打ち切る（#31）。"""
+
+    def _archived(self, sid: str, *, has_more: bool = True) -> Any:
+        return parse_page(_page_json([_row(sid, tags=["issue-1"], status=ARCHIVED)], has_more=has_more))
+
+    def _live(self, sid: str) -> Any:
+        return parse_page(_page_json([_row(sid, tags=["issue-1"])], has_more=True))
+
+    def test_stops_after_k_trailing_all_archived_pages(self) -> None:
+        pages = [self._live("a"), self._archived("b"), self._archived("c")]
+        assert next_after_id(pages, stop_after=2) is None
+        assert is_truncated(pages, stop_after=2) is True
+
+    def test_keeps_asking_before_k_pages(self) -> None:
+        pages = [self._live("a"), self._archived("b")]
+        assert next_after_id(pages, stop_after=2) == "b"
+        assert is_truncated(pages, stop_after=2) is False
+
+    def test_a_live_page_resets_the_run(self) -> None:
+        pages = [self._archived("a"), self._live("b")]
+        assert next_after_id(pages, stop_after=2) == "b"
+
+    def test_complete_listing_is_not_reported_as_truncated(self) -> None:
+        pages = [self._archived("a"), self._archived("b", has_more=False)]
+        assert next_after_id(pages, stop_after=2) is None
+        assert is_truncated(pages, stop_after=2) is False
+
+    def test_default_never_truncates(self) -> None:
+        pages = [self._archived("a"), self._archived("b"), self._archived("c")]
+        assert next_after_id(pages) == "c"
