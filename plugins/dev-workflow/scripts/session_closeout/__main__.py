@@ -1,4 +1,4 @@
-"""CLI: `session_closeout.sh <list_sessions の結果ファイル（取得順）>... [--issue N ...] [--repo owner/repo]`。
+"""CLI: `session_closeout.sh <list_sessions の結果ファイル（取得順）>... [--session <get_session の結果ファイル>]... [--issue N ...] [--repo owner/repo]`。
 
 終了コード: 0 = 判定を出した / 2 = ページが足りない（次の `after_id` を stderr に出す）/
 3 = list_sessions の行に session_context が無く、get_session での補完が要る（id を stderr に出す）/ 1 = 入力・通信の失敗。
@@ -20,13 +20,13 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
-from .bundles import Grouping, bucket_short, complete, group, is_truncated, load_details, issue_branch, load_pages, next_after_id, repo_from_remote_url
+from .bundles import Grouping, bucket_short, fill_session_context, group, is_truncated, load_details, issue_branch, load_pages, next_after_id, repo_from_remote_url
 from .judge import IssueState, PullRequest, Verdict, judge
 
 _GH_API = "https://api.github.com"
 EXIT_INCOMPLETE = 2
 EXIT_NEEDS_CONTEXT = 3
-DEFAULT_STOP_AFTER = 2  # アーカイブ済みだけのページがこの枚数続いたら打ち切る（SKILL.md と一致させる）
+STOP_AFTER_ARCHIVED_PAGES = 2  # アーカイブ済みだけのページがこの枚数続いたら打ち切る（SKILL.md と一致させる）
 
 Fetch = Callable[[int], IssueState]
 
@@ -123,8 +123,6 @@ def main(argv: list[str] | None = None, fetch: Fetch | None = None) -> int:
     ap.add_argument("--repo", help="owner/repo（既定は git remote origin）")
     ap.add_argument("--session", action="append", type=Path, default=[],
                     help="get_session の結果ファイル（要補完の id ごとに 1 つ。複数可）")
-    ap.add_argument("--stop-after-archived-pages", type=int, default=DEFAULT_STOP_AFTER, metavar="K",
-                    help=f"アーカイブ済みだけのページが K 枚続いたら打ち切る（既定 {DEFAULT_STOP_AFTER}）")
     ap.add_argument("--format", choices=["table", "json"], default="table")
     args = ap.parse_args(argv)
 
@@ -136,7 +134,7 @@ def main(argv: list[str] | None = None, fetch: Fetch | None = None) -> int:
 
     try:
         pages = load_pages(args.pages)
-        after_id = next_after_id(pages, args.stop_after_archived_pages)
+        after_id = next_after_id(pages, STOP_AFTER_ARCHIVED_PAGES)
     except (OSError, ValueError) as e:
         print(f"結果ファイルを読めない: {e}", file=sys.stderr)
         return 1
@@ -146,13 +144,13 @@ def main(argv: list[str] | None = None, fetch: Fetch | None = None) -> int:
         return EXIT_INCOMPLETE
 
     try:
-        pages = complete(pages, load_details(args.session))
+        pages = fill_session_context(pages, load_details(args.session))
     except (OSError, ValueError) as e:
         print(f"結果ファイルを読めない: {e}", file=sys.stderr)
         return 1
     grouping = group(pages, args.self_id, set(args.issue) if args.issue else None, repo)
-    if is_truncated(pages, args.stop_after_archived_pages):
-        grouping.truncated_after = args.stop_after_archived_pages
+    if is_truncated(pages, STOP_AFTER_ARCHIVED_PAGES):
+        grouping.truncated_after = STOP_AFTER_ARCHIVED_PAGES
     if grouping.needs_context:
         ids = " ".join(s.id for s in grouping.needs_context)
         print("list_sessions の行に session_context が無い。次の id を get_session で引き、"

@@ -35,6 +35,20 @@ def bucket_short(bucket: str) -> str:
 
 
 @dataclass(frozen=True)
+class SourceRef:
+    """`session_context.sources[0].git_repository` の url と revision。"""
+
+    url: str | None
+    revision: str | None
+
+
+def _source_ref(context: dict[str, Any] | None) -> SourceRef:
+    sources = (context or {}).get("sources") or [{}]
+    git_repository = sources[0].get("git_repository") or {}
+    return SourceRef(url=git_repository.get("url"), revision=git_repository.get("revision"))
+
+
+@dataclass(frozen=True)
 class Session:
     id: str
     status: str
@@ -72,16 +86,14 @@ def _session(row: dict[str, Any]) -> Session:
     if status != ARCHIVED and bucket not in KNOWN_BUCKETS:
         raise ValueError(f"{row.get('id')} の status_bucket が想定外: {bucket!r}（既知: {sorted(KNOWN_BUCKETS)}）")
     context = row.get("session_context")
-    sources = (context or {}).get("sources") or [{}]
-    git_repository = sources[0].get("git_repository") or {}
-    revision = git_repository.get("revision")
+    ref = _source_ref(context)
     return Session(
         id=row["id"],
         status=status,
         bucket=bucket or "",
         tags=tuple(row.get("tags") or ()),
-        revision=revision,
-        repo_url=git_repository.get("url"),
+        revision=ref.revision,
+        repo_url=ref.url,
         title=row.get("title", ""),
         context_known=context is not None,
     )
@@ -123,6 +135,8 @@ def is_truncated(pages: list[Page], stop_after: int | None = None) -> bool:
     """続きがあるのに、末尾の `stop_after` 枚がアーカイブ済みだけなので打ち切ってよい、か。
 
     一覧は新しい順なので、アーカイブ済みだけのページが続けばその先も古いアーカイブ済みとみなす（実測: #31）。
+    空のページ（`has_more=true` なのに 0 件）は連続に数えない。取得の失敗や手で作ったページの疑いがあり、
+    それで「古いアーカイブ済みが続いた」と決めると未取得の生きたセッションを落とすため、続きを引かせる。
     """
     if stop_after is None or not pages or not pages[-1].has_more or len(pages) < stop_after:
         return False
@@ -144,7 +158,7 @@ def next_after_id(pages: list[Page], stop_after: int | None = None) -> str | Non
     return pages[-1].last_id if pages[-1].has_more else None
 
 
-def parse_session_detail(text: str) -> tuple[str, str | None, str | None]:
+def parse_session_detail(text: str) -> tuple[str, SourceRef]:
     """`get_session` の結果ファイルから (id, リポジトリ URL, revision) を読む。"""
     payload: Any = None
     for line in text.splitlines():
@@ -162,28 +176,26 @@ def parse_session_detail(text: str) -> tuple[str, str | None, str | None]:
     body = payload.get("ccr", payload)
     if "id" not in body or "session_context" not in body:
         raise ValueError(f"get_session の結果として読めない: id / session_context が無い (keys={sorted(body)})")
-    sources = (body["session_context"] or {}).get("sources") or [{}]
-    git_repository = sources[0].get("git_repository") or {}
-    return body["id"], git_repository.get("url"), git_repository.get("revision")
+    return body["id"], _source_ref(body["session_context"])
 
 
-def load_details(paths: list[Path]) -> dict[str, tuple[str | None, str | None]]:
-    details: dict[str, tuple[str | None, str | None]] = {}
+def load_details(paths: list[Path]) -> dict[str, SourceRef]:
+    details: dict[str, SourceRef] = {}
     for p in paths:
         try:
-            sid, url, revision = parse_session_detail(p.read_text(encoding="utf-8"))
+            sid, ref = parse_session_detail(p.read_text(encoding="utf-8"))
         except ValueError as e:
             raise ValueError(f"{p}: {e}") from e
-        details[sid] = (url, revision)
+        details[sid] = ref
     return details
 
 
-def complete(pages: list[Page], details: dict[str, tuple[str | None, str | None]]) -> list[Page]:
+def fill_session_context(pages: list[Page], details: dict[str, SourceRef]) -> list[Page]:
     """`session_context` を持たない行に、`get_session` で読んだリポジトリと revision を足す。"""
     out = []
     for page in pages:
         sessions = [
-            replace(s, repo_url=details[s.id][0], revision=details[s.id][1], context_known=True)
+            replace(s, repo_url=details[s.id].url, revision=details[s.id].revision, context_known=True)
             if not s.context_known and s.id in details else s
             for s in page.sessions
         ]
@@ -222,17 +234,16 @@ def group(pages: list[Page], self_id: str | None, issues: set[int] | None, repo:
             if not numbers:
                 excluded.append((s, "issue-<番号> タグが無い（手で開いたセッション）"))
                 continue
+            targets = [n for n in numbers if issues is None or n in issues]
+            if not targets:
+                excluded.append((s, "引数で指定した issue ではない"))
+                continue
             if not s.context_known:
-                if issues is None or any(n in issues for n in numbers):
-                    needs_context.append(s)
+                needs_context.append(s)
                 continue
             if not s.in_repo(repo):
                 reason = "source のリポジトリが無い" if s.repo_url is None else f"別リポ（{s.repo_url}）のセッション"
                 excluded.append((s, reason))
-                continue
-            targets = [n for n in numbers if issues is None or n in issues]
-            if not targets:
-                excluded.append((s, "引数で指定した issue ではない"))
                 continue
             for n in targets:
                 bundles.setdefault(n, []).append(s)

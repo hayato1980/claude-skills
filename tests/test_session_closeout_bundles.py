@@ -250,3 +250,11 @@ class TestStopAfterArchivedPages:
     def test_default_never_truncates(self) -> None:
         pages = [self._archived("a"), self._archived("b"), self._archived("c")]
         assert next_after_id(pages) == "c"
+
+
+class TestIssueFilterWithoutSessionContext:
+    def test_row_for_another_issue_is_reported_as_excluded_not_dropped(self) -> None:
+        rows = [_list_row("a", tags=["issue-1"]), _list_row("b", tags=["issue-2"])]
+        g = group([parse_page(_page_json(rows))], None, {2}, REPO)
+        assert [s.id for s in g.needs_context] == ["b"]
+        assert [(s.id, r) for s, r in g.excluded] == [("a", "引数で指定した issue ではない")]

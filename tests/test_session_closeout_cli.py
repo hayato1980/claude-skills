@@ -186,7 +186,7 @@ class TestTruncation:
 
     def test_truncates_explicitly_instead_of_asking_for_more(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         pages = [str(self._archived_page(tmp_path, n)) for n in ("p1", "p2")]
-        assert main(["--repo", REPO, "--stop-after-archived-pages", "2", *pages], fetch=_merged) == 0
+        assert main(["--repo", REPO, *pages], fetch=_merged) == 0
         out = capsys.readouterr().out
         assert "打ち切り" in out and "2 ページ" in out
 
