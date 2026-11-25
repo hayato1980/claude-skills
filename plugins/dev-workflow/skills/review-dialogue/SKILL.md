@@ -4,13 +4,14 @@ description: "払い出された `mattpocock-skills:code-review`（Standards / S
 argument-hint: "#NNN"
 ---
 
-Use this skill when: acting as the review side of a payout for issue #NNN. The upstream `mattpocock-skills:code-review` skill only reads the diff and reports Standards / Spec findings back into the conversation — it has no notion of GitHub, PRs, or the requirement that every finding become its own resolvable review thread. This skill is the layer between that upstream output and the PR: it pins the fixed point so the upstream skill never has to ask, then turns the aggregated report into one GitHub review thread per finding.
+Use this skill when: acting as the review side of a payout for issue #NNN or for a PR without an issue (#NNN is the PR number). The upstream `mattpocock-skills:code-review` skill only reads the diff and reports Standards / Spec findings back into the conversation — it has no notion of GitHub, PRs, or the requirement that every finding become its own resolvable review thread. This skill is the layer between that upstream output and the PR: it pins the fixed point so the upstream skill never has to ask, then turns the aggregated report into one GitHub review thread per finding.
 
 対象: $ARGUMENTS
 
 ## 発動トリガー
 
 - Skill ツールで `dev-workflow:review-dialogue` を引数 `#NNN` で発動（`create-ccw-session` がレビュー払い出しの prompt で「Skill ツールで発動する」と指示する。`create_session` は `/` で始まる prompt を拒むので、スラッシュ形では呼ばれない → [`create-ccw-session`](../create-ccw-session/SKILL.md)「レビューの払い出し」）
+- 引数 `#NNN` は issue 番号でも PR 番号でもよい（issue を持たない PR のレビュー払い出し。手順 2 で見分ける）
 - 「#NNN を review-dialogue に出して」「#NNN のレビューを走らせて」
 
 このスキルは**レビュー側**として動く。往復の作法（ラウンドの閉じ方・相手が来ないとき・resolve と ready 化・マージがレビュー側の専権であること等）はすべて [`runbook.md`](./runbook.md) が正準。本 SKILL.md はそこへ二重に書かない。
@@ -20,7 +21,7 @@ Use this skill when: acting as the review side of a payout for issue #NNN. The u
 
 ## 前提
 
-対象 issue の実装ブランチ `claude/issue-<番号>` が `source_revision` としてチェックアウド済み（→ `create-ccw-session` の「レビューの払い出し」）。このブランチを `head` とする open PR が対象。
+対象の実装ブランチ（issue なら `claude/issue-<番号>`、issue を持たない PR ならその head ブランチ名）が `source_revision` としてチェックアウド済み（→ `create-ccw-session` の「レビューの払い出し」）。このブランチを `head` とする open PR が対象。
 
 ## 手順
 
@@ -35,7 +36,7 @@ git merge-base HEAD origin/main
 
 ### 2. 対象 PR を特定する
 
-`head` が `claude/issue-<番号>` の open PR を GitHub 側で探す（`mcp__github__pull_request_read` / `list_pull_requests`）。
+引数 `#<番号>` は issue 番号と PR 番号のどちらでもよい。`mcp__github__issue_read` で引き、結果に `pull_request` があれば**その番号が PR**（head ブランチ名は `pull_request_read` で読む）。無ければ issue なので、`head` が `claude/issue-<番号>` の open PR を GitHub 側で探す（`mcp__github__list_pull_requests`）。
 
 ### 3. 上流 `mattpocock-skills:code-review` を呼ぶ
 

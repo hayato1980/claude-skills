@@ -2,7 +2,7 @@
 name: create-ccw-session
 description: "起票済みの GitHub issue を、オーナーが承認したフロー（指定が無ければ親が案を出す）で子の CCW（Claude Code Web）セッションへ払い出す。「この issue を CCW で進めて」「#NNN を tdd で払い出して」「#NNN を review-dialogue に出して」「子セッションを立てて」で発動。"
 argument-hint: "#683 [#684 ...] [フロー語 (tdd|review-dialogue|diagnosing-bugs|grill-with-docs|...)]"
-allowed-tools: mcp__github__issue_read, mcp__claude-code-remote__create_session, mcp__claude-code-remote__get_session, mcp__claude-code-remote__list_sessions, Bash(grep:*), Bash(jq:*), Bash(ls:*), Bash(find:*), Bash(sort:*), Bash(tail:*), Read
+allowed-tools: mcp__github__issue_read, mcp__github__pull_request_read, mcp__claude-code-remote__create_session, mcp__claude-code-remote__set_session_tags, mcp__claude-code-remote__get_session, mcp__claude-code-remote__list_sessions, Bash(grep:*), Bash(jq:*), Bash(ls:*), Bash(find:*), Bash(sort:*), Bash(tail:*), Read
 ---
 
 Use this skill when: handing an already-filed GitHub issue to a child CCW session, on a flow the owner has approved, instead of doing the work in this session.
@@ -78,6 +78,10 @@ Use this skill when: handing an already-filed GitHub issue to a child CCW sessio
 | 払い出してよいと判断済みのラベル（`ready-for-agent` 等）が付いている | 払い出す |
 | 設定が「払い出さない」とするラベル（`ready-for-human` / `blocked-upstream` / `wontfix` 等）が付いている | **払い出さない。** 理由をユーザーに伝えて終わる |
 | 設定が「止めて聞く」とするラベル（`needs-triage` / `needs-info` 等）が付いている、または**ラベルが無い** | 推測で払い出さない。triage を通すか、それでも払い出すかをユーザーに聞いて止まる |
+
+**issue を持たない PR のレビュー払い出し（`#<PR番号>`）では、門は PR のラベルで行う。** PR にラベルが付いていないことが多いが、
+これは「ラベルが無い」の「止めて聞く」には**当てない**（PR は既にオーナー自身が作って出した成果物で、triage の対象ではない）。
+「払い出さない」「止めて聞く」の一覧に載るラベルが PR に付いているときだけ、上の表どおりに止める。ラベルが無ければ払い出す。
 
 **この門は `review-dialogue` の払い出しにも同じく効く。** 実装が `ready-for-human` で止まった issue は、
 レビューを出しても進まない。ただし、往復が決裂・打ち切りで人へ渡されて `ready-for-human` が付いた PR は別で、
@@ -285,6 +289,31 @@ create_session(
 **自分が作った PR への応答ではない**。オーナーがこのセッションで直接実装して PR を作り、レビューだけを払い出した
 場合、**修正側はこのセッション自身**になる（役割はセッションの出自ではなく PR に対する立場に宿る）。
 
+### issue を持たない PR のレビュー払い出し
+
+オーナーが直接作業で作った PR（head がハーネスの乱数のブランチ名で `claude/issue-<番号>` 型でない）は、
+[自動払い出し](#pr-作成後の自動レビュー払い出し)の対象外なので、オーナーが `#<PR番号>` を渡して手で払い出す。
+引数が issue か PR かは、`mcp__github__issue_read` の結果に `pull_request` があるかで決める（GitHub は PR も同じ番号で issue として返す）。
+PR のときの `create_session` の引数は次のとおり。ほかは上の表と同じ。
+
+| 引数 | 値 |
+|---|---|
+| `title` | `PR #<番号> [review-dialogue] <PR タイトル逐語>` |
+| `tags` | `["review-dialogue", "pr-<PR番号>", "<第 3 要素>"]`（第 3 要素は上の表と同じ決め方） |
+| `prompt` | ``PR #<PR番号> に取り組む。Skill ツールで `dev-workflow:review-dialogue` を引数 `#<PR番号>` で発動する。`` — 読み替えの指示は書かない |
+| `source_revision` / `outcome_branch` | PR の **head ブランチ名**そのもの（`pull_request_read` で読む） |
+
+**修正側は、その PR を作ったセッション（＝払い出すこのセッション自身）。** 修正側は `pr-<PR番号>` タグを持たないので、
+**`create_session` の前に自分へ付ける**:
+
+```
+mcp__claude-code-remote__set_session_tags(session_ids=["<自分の session id>"], add=["pr-<PR番号>"])
+```
+
+自分の id は `get_session()` を `session_id` 省略で呼んで読む。これを飛ばすと、レビュー側が「相手を引く」で 0 行になり
+ポークが出ず、往復が片方向になる。付けておけば、往復の「相手を引く」（→ [runbook](../review-dialogue/runbook.md)「ラウンドの閉じ方」手順 1）は
+双方向で `pr-<PR番号>` で引け、`session-closeout` の束ねにも両側が入る。
+
 ### PR 作成後の自動レビュー払い出し
 
 **head が `claude/issue-<番号>` の PR を作ったセッション**（払い出された子は `outcome_branch` でこのブランチに push
@@ -327,7 +356,7 @@ Skill ツールが途中でも呼ばれるため、直接作業の途中で `tdd
 
 **除外の処理は持たない。** レビュー側（`review-dialogue`）は push しないので PR を作らず、ふつうの直接作業は
 ブランチ名が乱数になるので反応しない。直接セッションで最初にフローを打っても、head が `claude/issue-<番号>` で
-なければ何も出ない（受け入れている。head ブランチ名での一般化は #25）。
+なければ何も出ない（受け入れている）。その PR のレビューは、オーナーが[手で払い出す](#issue-を持たない-pr-のレビュー払い出し)。
 
 ## なぜ親がフローを決めないか
 

@@ -20,6 +20,7 @@ class PullRequest:
     state: str  # "open" | "closed"
     merged: bool
     draft: bool
+    head: str = ""  # head ブランチ名（PR 束の役割判定に使う）
 
 
 @dataclass(frozen=True)
@@ -37,6 +38,17 @@ class Verdict:
     issue_is_candidate: bool = False  # issue そのものを手順 4 の候補に入れるか
 
 
+def _session_verdict(sessions: list[Session]) -> Verdict | None:
+    """セッションの状態だけで決まる判定（working は未了、failed / blocked は要確認）。issue 束と PR 束で共通。"""
+    working = [s for s in sessions if s.bucket == BUCKET_WORKING]
+    if working:
+        return Verdict(UNFINISHED, f"{working[0].id} が working")
+    stuck = [s for s in sessions if s.bucket in _STUCK]
+    if stuck:
+        return Verdict(NEEDS_OWNER, f"{stuck[0].id} が status_bucket={bucket_short(stuck[0].bucket)}")
+    return None
+
+
 def judge(sessions: list[Session], issue_state: IssueState) -> Verdict:
     """束を丸ごと判定する。オーナーへの質問の有無は会話を読まないと分からないので、ここでは見ない（手順 3）。"""
     prs = issue_state.prs
@@ -44,12 +56,8 @@ def judge(sessions: list[Session], issue_state: IssueState) -> Verdict:
     if open_prs:
         p = open_prs[0]
         return Verdict(UNFINISHED, f"PR #{p.number} が {'draft' if p.draft else 'open'}")
-    working = [s for s in sessions if s.bucket == BUCKET_WORKING]
-    if working:
-        return Verdict(UNFINISHED, f"{working[0].id} が working")
-    stuck = [s for s in sessions if s.bucket in _STUCK]
-    if stuck:
-        return Verdict(NEEDS_OWNER, f"{stuck[0].id} が status_bucket={bucket_short(stuck[0].bucket)}")
+    if (v := _session_verdict(sessions)) is not None:
+        return v
 
     merged = [p for p in prs if p.merged]
     issue_open = issue_state.state == "open"
@@ -66,3 +74,14 @@ def judge(sessions: list[Session], issue_state: IssueState) -> Verdict:
     if issue_open:
         return Verdict(READ_CONVERSATION, "PR 無し・issue open（最後のターンで成果を出し切っていれば終了）", True)
     return Verdict(DONE, "PR 無し・issue closed")
+
+
+def judge_pr(sessions: list[Session], pr: PullRequest) -> Verdict:
+    """issue を持たない PR の束。PR の state が材料（merged / 未マージで closed は終了、open は未了）。"""
+    if pr.state == "open":
+        return Verdict(UNFINISHED, f"PR #{pr.number} が {'draft' if pr.draft else 'open'}")
+    if (v := _session_verdict(sessions)) is not None:
+        return v
+    if pr.merged:
+        return Verdict(DONE, f"PR #{pr.number} merged")
+    return Verdict(DONE, f"PR #{pr.number} が未マージで closed")

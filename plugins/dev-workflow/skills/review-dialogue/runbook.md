@@ -52,7 +52,7 @@ mcp__claude-code-remote__list_sessions(mine=true, limit=100)
 
 返ってきた各行の **`tags`**・**`session_status`** を見て、次を**すべて**満たす行を集める。
 
-- `tags` に `issue-<番号>` を含む
+- `tags` に `issue-<番号>` を含む（issue を持たない PR では、代わりに `pr-<PR番号>` を含む。PR の head が `claude/issue-<番号>` 型ならどちらでもよい）
 - `session_status` が **`SESSION_STATUS_ARCHIVED` でない**
 - **自分自身ではない** —— 自分の行を除く。**環境変数 `CLAUDE_CODE_REMOTE_SESSION_ID` と行の `id` は接頭辞が違う**（環境変数は `cse_015Gb…`、行の `id` は `session_015Gb…`。接頭辞より後ろは同じ）ので、そのままでは一致しない。`SELF="${CLAUDE_CODE_REMOTE_SESSION_ID#cse_}"` で接頭辞を外し、行の `id` から `session_` を外した値と比べる（`get_session()` を session_id 省略で呼んで返る自分の `id` と比べてもよい）。**他の文書の「自分の除外」はこの記述を参照する**
 
@@ -60,7 +60,7 @@ mcp__claude-code-remote__list_sessions(mine=true, limit=100)
 
 - **1 行** → それが相手。
 - **0 行** → 相手が引けない（正常系。下記）。
-- **2 行以上** → 候補ごとに `get_session(session_id)` で `session_context.sources[0].git_repository.revision` を読み（`list_sessions` の行では欠けるが `get_session` では読める）、絞り込む。**自分がレビュー側なら修正側を探す**ので revision が `claude/issue-<番号>` **以外**（`get_session` で読めた上で未設定のもの、`refs/heads/main` 等のデフォルトブランチを含む）、**自分が修正側ならレビュー側を探す**ので revision が `claude/issue-<番号>` **そのもの**の行だけ残す。1 行に絞れればそれが相手。絞っても複数残る、または `get_session` でも読めない行があるときは、下の「どれも起こさない」へ。
+- **2 行以上** → 候補ごとに `get_session(session_id)` で `session_context.sources[0].git_repository.revision` を読み（`list_sessions` の行では欠けるが `get_session` では読める）、絞り込む。**自分がレビュー側なら修正側を探す**ので revision が `claude/issue-<番号>`（issue を持たない PR では PR の head ブランチ名）**以外**（`get_session` で読めた上で未設定のもの、`refs/heads/main` 等のデフォルトブランチを含む）、**自分が修正側ならレビュー側を探す**ので revision が `claude/issue-<番号>`（同上）**そのもの**の行だけ残す。1 行に絞れればそれが相手。絞っても複数残る、または `get_session` でも読めない行があるときは、下の「どれも起こさない」へ。
 
 **`revision` を引く条件にしてはいけない。** `list_sessions` の行では `session_context` が `null`（`sources` も欠ける）ことがあり、実測では 100 行すべてで null だったこともある（#30）。revision を必須条件にすると、**修正側からレビュー側が 0 件に見えてポークが空振りし、往復が静かに止まる**（レビュー側からの判定は否定形なので当たり、修正側の方向だけが壊れる）。`revision` は複数残ったときの絞り込みにだけ使う。
 

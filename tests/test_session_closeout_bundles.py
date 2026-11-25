@@ -81,7 +81,7 @@ class TestGroup:
     def test_session_without_issue_tag_is_excluded(self) -> None:
         g = group([parse_page(_page_json([_row("x", tags=["tdd", "issue-x"])]))], self_id=None, issues=None, repo=REPO)
         assert g.bundles == {}
-        assert "issue-<番号> タグが無い" in g.excluded[0][1]
+        assert "issue-<番号> / pr-<番号> タグが無い" in g.excluded[0][1]
 
     def test_other_repo_session_is_excluded_even_with_issue_tag(self) -> None:
         other = _row("x", tags=["issue-815"], url="https://github.com/acme/other")
@@ -108,7 +108,7 @@ class TestGroup:
     def test_untagged_session_without_source_keeps_the_tag_reason(self) -> None:
         row = {**_row("x", tags=[]), "session_context": {"sources": []}}
         g = group([parse_page(_page_json([row]))], self_id=None, issues=None, repo=REPO)
-        assert [r for _, r in g.excluded] == ["issue-<番号> タグが無い（手で開いたセッション）"]
+        assert [r for _, r in g.excluded] == ["issue-<番号> / pr-<番号> タグが無い（手で開いたセッション）"]
 
     def test_implementation_and_review_share_one_bundle(self) -> None:
         rows = [_row("impl", tags=["issue-7"]), _row("rev", tags=["issue-7"], revision="claude/issue-7")]
@@ -124,7 +124,7 @@ class TestGroup:
         rows = [_row("a", tags=["issue-1"]), _row("b", tags=["issue-2"])]
         g = group([parse_page(_page_json(rows))], self_id=None, issues={2}, repo=REPO)
         assert list(g.bundles) == [2]
-        assert g.excluded[0][1] == "引数で指定した issue ではない"
+        assert g.excluded[0][1] == "引数で指定した issue / PR ではない"
 
     def test_same_session_on_two_pages_counted_once(self) -> None:
         p = parse_page(_page_json([_row("a", tags=["issue-1"])]))
@@ -258,4 +258,15 @@ class TestIssueFilterWithoutSessionContext:
         rows = [_list_row("a", tags=["issue-1"]), _list_row("b", tags=["issue-2"])]
         g = group([parse_page(_page_json(rows))], None, {2}, REPO)
         assert [s.id for s in g.needs_context] == ["b"]
-        assert [(s.id, r) for s, r in g.excluded] == [("a", "引数で指定した issue ではない")]
+        assert [(s.id, r) for s, r in g.excluded] == [("a", "引数で指定した issue / PR ではない")]
+
+
+class TestPrTaggedSessions:
+    """issue を持たない PR のレビュー払い出しは `pr-<番号>` タグで束ねる（#25）。"""
+
+    def test_pr_tag_makes_a_pr_bundle(self) -> None:
+        rows = [_row("rev", tags=["review-dialogue", "pr-36"], revision="claude/sweet-hopper-xfhls6")]
+        g = group([parse_page(_page_json(rows))], self_id=None, issues=None, repo=REPO)
+        assert [s.id for s in g.pr_bundles[36]] == ["rev"]
+        assert g.bundles == {}
+        assert g.excluded == []

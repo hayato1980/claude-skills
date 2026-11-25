@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from .bundles import Grouping, bucket_short, fill_session_context, group, is_truncated, load_details, issue_branch, load_pages, next_after_id, repo_from_remote_url
-from .judge import IssueState, PullRequest, Verdict, judge
+from .judge import IssueState, PullRequest, Verdict, judge, judge_pr
 
 _GH_API = "https://api.github.com"
 EXIT_INCOMPLETE = 2
@@ -29,6 +29,7 @@ EXIT_NEEDS_CONTEXT = 3
 STOP_AFTER_ARCHIVED_PAGES = 2  # アーカイブ済みだけのページがこの枚数続いたら打ち切る（SKILL.md と一致させる）
 
 Fetch = Callable[[int], IssueState]
+FetchPr = Callable[[int], PullRequest]
 
 
 def _default_self_id() -> str | None:
@@ -72,13 +73,27 @@ def github_fetcher(repo: str, token: str) -> Fetch:
     return fetch
 
 
-def _render_table(grouping: Grouping, states: dict[int, IssueState], verdicts: dict[int, Verdict]) -> str:
+def github_pr_fetcher(repo: str, token: str) -> FetchPr:
+    def fetch(number: int) -> PullRequest:
+        p = _gh_get(f"/repos/{repo}/pulls/{number}", token)
+        return PullRequest(number=p["number"], state=p["state"], merged=p.get("merged_at") is not None,
+                           draft=p["draft"], head=p["head"]["ref"])
+
+    return fetch
+
+
+def _render_table(grouping: Grouping, states: dict[int, IssueState], verdicts: dict[int, Verdict],
+                  prs: dict[int, PullRequest], pr_verdicts: dict[int, Verdict]) -> str:
     lines = ["| 束 | 判定 | 理由 | issue | PR | セッション（役割 / status_bucket） |", "|---|---|---|---|---|---|"]
     for n, sessions in grouping.bundles.items():
         st, v = states[n], verdicts[n]
         pr_text = ", ".join(f"#{p.number}({'merged' if p.merged else p.state})" for p in st.prs) or "無し"
         sess = "<br>".join(f"{s.id}（{s.role(n)} / {bucket_short(s.bucket)}）" for s in sessions)
         lines.append(f"| #{n} | {v.kind} | {v.reason} | {st.state} | {pr_text} | {sess} |")
+    for n, sessions in grouping.pr_bundles.items():
+        pr, v = prs[n], pr_verdicts[n]
+        sess = "<br>".join(f"{s.id}（{s.role_on(pr.head)} / {bucket_short(s.bucket)}）" for s in sessions)
+        lines.append(f"| PR #{n} | {v.kind} | {v.reason} | 無し | #{n}({'merged' if pr.merged else pr.state}) | {sess} |")
     lines.append("")
     lines.append(f"archive 済み（除外）: {grouping.archived} 件")
     if grouping.truncated_after:
@@ -88,7 +103,8 @@ def _render_table(grouping: Grouping, states: dict[int, IssueState], verdicts: d
     return "\n".join(lines)
 
 
-def _render_json(grouping: Grouping, states: dict[int, IssueState], verdicts: dict[int, Verdict]) -> str:
+def _render_json(grouping: Grouping, states: dict[int, IssueState], verdicts: dict[int, Verdict],
+                 prs: dict[int, PullRequest], pr_verdicts: dict[int, Verdict]) -> str:
     out = {
         "bundles": [
             {
@@ -101,6 +117,16 @@ def _render_json(grouping: Grouping, states: dict[int, IssueState], verdicts: di
             }
             for n, sessions in grouping.bundles.items()
         ],
+        "pr_bundles": [
+            {
+                "pr": n,
+                "pr_state": asdict(prs[n]),
+                "verdict": asdict(pr_verdicts[n]),
+                "sessions": [{"id": s.id, "role": s.role_on(prs[n].head), "status": s.status, "bucket": s.bucket,
+                              "revision": s.revision, "title": s.title} for s in sessions],
+            }
+            for n, sessions in grouping.pr_bundles.items()
+        ],
         "archived": grouping.archived,
         "truncated_after_archived_pages": grouping.truncated_after,
         "excluded": [{"id": s.id, "reason": r} for s, r in grouping.excluded],
@@ -108,17 +134,26 @@ def _render_json(grouping: Grouping, states: dict[int, IssueState], verdicts: di
     return json.dumps(out, ensure_ascii=False, indent=2)
 
 
-def _github_from_env(repo: str) -> Fetch:
+def _github_token() -> str:
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
     if not token:
         raise ValueError("GH_TOKEN（または GITHUB_TOKEN）が未設定です。")
-    return github_fetcher(repo, token)
+    return token
 
 
-def main(argv: list[str] | None = None, fetch: Fetch | None = None) -> int:
+def _github_from_env(repo: str) -> Fetch:
+    return github_fetcher(repo, _github_token())
+
+
+def _github_pr_from_env(repo: str) -> FetchPr:
+    return github_pr_fetcher(repo, _github_token())
+
+
+def main(argv: list[str] | None = None, fetch: Fetch | None = None, fetch_pr: FetchPr | None = None) -> int:
     ap = argparse.ArgumentParser(prog="session_closeout.sh", description=__doc__)
     ap.add_argument("pages", nargs="+", type=Path, help="list_sessions の結果ファイル（取得順）")
     ap.add_argument("--issue", type=int, action="append", help="対象を絞る issue 番号（複数可）")
+    ap.add_argument("--pr", type=int, action="append", help="対象を絞る PR 番号（issue を持たない PR の `pr-<番号>` タグ。複数可）")
     ap.add_argument("--self-id", default=_default_self_id(), help="除外する自分の session id（既定は環境変数から）")
     ap.add_argument("--repo", help="owner/repo（既定は git remote origin）")
     ap.add_argument("--session", action="append", type=Path, default=[],
@@ -150,7 +185,8 @@ def main(argv: list[str] | None = None, fetch: Fetch | None = None) -> int:
         print(f"結果ファイルを読めない: {e}", file=sys.stderr)
         return 1
     grouping = group(pages, args.self_id, set(args.issue) if args.issue else None, repo,
-                     truncated_after=STOP_AFTER_ARCHIVED_PAGES if truncated else None)
+                     truncated_after=STOP_AFTER_ARCHIVED_PAGES if truncated else None,
+                     prs=set(args.pr) if args.pr else None)
     if grouping.needs_context:
         ids = " ".join(s.id for s in grouping.needs_context)
         print("list_sessions の行に session_context が無い。次の id を get_session で引き、"
@@ -158,6 +194,8 @@ def main(argv: list[str] | None = None, fetch: Fetch | None = None) -> int:
         return EXIT_NEEDS_CONTEXT
     states: dict[int, IssueState] = {}
     verdicts: dict[int, Verdict] = {}
+    prs: dict[int, PullRequest] = {}
+    pr_verdicts: dict[int, Verdict] = {}
     try:
         get = fetch or _github_from_env(repo)
         for n, sessions in grouping.bundles.items():
@@ -166,11 +204,19 @@ def main(argv: list[str] | None = None, fetch: Fetch | None = None) -> int:
             except (OSError, KeyError, json.JSONDecodeError) as e:
                 raise ValueError(f"#{n} の issue / PR を取れない: {type(e).__name__}: {e}") from e
             verdicts[n] = judge(sessions, states[n])
+        if grouping.pr_bundles:
+            get_pr = fetch_pr or _github_pr_from_env(repo)
+            for n, sessions in grouping.pr_bundles.items():
+                try:
+                    prs[n] = get_pr(n)
+                except (OSError, KeyError, json.JSONDecodeError) as e:
+                    raise ValueError(f"PR #{n} を取れない: {type(e).__name__}: {e}") from e
+                pr_verdicts[n] = judge_pr(sessions, prs[n])
     except ValueError as e:
         print(e, file=sys.stderr)
         return 1
     render = _render_json if args.format == "json" else _render_table
-    print(render(grouping, states, verdicts))
+    print(render(grouping, states, verdicts, prs, pr_verdicts))
     return 0
 
 
