@@ -29,7 +29,7 @@
 レビュー側  取り下げ or 維持を明示 → 納得したスレッドを resolve
                   ↓
             全件 resolved → ready_wait_merge.sh で CI 待ち → green ならマージ → 修正側をポーク → 購読解除 → 終了
-                            （needs-owner-merge なら ready 化して CI を見届けて止める / CI 赤・コンフリクトなら draft に戻して往復へ。直すのは修正側）
+                            （needs-owner-merge なら --no-merge で ready 化して CI を見届けて止める / CI 赤・コンフリクトなら draft に戻して往復へ。直すのは修正側）
             割れたまま 3 往復 → 決裂として人へ渡す → 購読解除 → 終了
             相手が来ない      → 打ち切りとして人へ渡す → 購読解除 → 終了
             表に無い中身の判断が要る → オーナー判断待ちとして人へ渡す → 購読解除 → 終了（判断後はレビューを払い出し直す）
@@ -228,16 +228,14 @@ thread の node ID は `mcp__github__pull_request_read(method="get_review_commen
 
 #### 7-2a. オーナーマージ対象 —— ready 化し、CI を見届けて止める
 
+```bash
+scripts/ci/ready_wait_merge.sh --no-merge <PR番号>   # Bash の run_in_background で起動する。先頭に bash を付けない
 ```
-mcp__github__update_pull_request(owner, repo, pullNumber, draft=false)
-```
 
-マージはオーナーが行う。マージ＝オーナーの承認として残すための例外である。
+ready 化 → CI 完了待ち → green でも**マージせずに止める**（終了コード 0。出力は「CI green。マージせずに止めます。」）。マージはオーナーが行う。マージ＝オーナーの承認として残すための例外である。7-2b と同じスクリプトなので、手元ゲート・HEAD 一致の確認・前の周の check run を取り違えない仕組みも通る。**起動の形（単独・先頭に `bash` を付けない・バックグラウンド）と、出力ごとの分岐は 7-2b の表と同じ**。違いは次の 1 行だけ。
 
-**ready 化したら、CI の結果を見届けてから終わる。** ready 化が CI を回す唯一のトリガーなので、結果はこの後に出る。購読（`check_suite.completed` の封筒）と自己チェックインで起きて、PR の最新 head の check を見る。
-
-- **green** → 購読を解除し、保留中のチェックインを消して終わる（`unsubscribe_pr_activity` / `delete_trigger`）。マージはオーナーを待つ。
-- **赤** → 7-2b の「CI が赤だったとき」と同じく、**自分で draft に戻してから**往復に戻る。全スレッドが resolved になったら本手順 7 をやり直す。オーナーに赤い ready の PR を渡さない。
+- **`CI green。マージせずに止めます。`** → 購読を解除し、保留中のチェックインを消して終わる（`unsubscribe_pr_activity` / `delete_trigger`）。マージはオーナーを待つ。
+- **それ以外**（赤・タイムアウト・手元ゲート失敗など）→ 7-2b の表どおり。赤なら**自分で draft に戻してから**往復に戻り、全スレッドが resolved になったら本手順 7 をやり直す。オーナーに赤い ready の PR を渡さない。
 
 #### 7-2b. それ以外 —— `ready_wait_merge.sh` でマージまで
 
@@ -386,7 +384,7 @@ mcp__github__add_reply_to_pull_request_comment(owner, repo, pullNumber, commentI
 | スレッド一覧と node ID | `pull_request_read(method="get_review_comments")` |
 | スレッドに返信 | `add_reply_to_pull_request_comment`（**数値の comment ID**） |
 | 解決 / 再オープン | `resolve_review_thread` / `pull_request_review_write(unresolve_thread)`（**node ID `PRRT_...`**） |
-| ready にする（オーナーマージ対象。CI を見届ける） | `update_pull_request(draft=false)` |
+| ready にする（オーナーマージ対象。CI を見届けて止める） | `scripts/ci/ready_wait_merge.sh --no-merge <PR番号>`（バックグラウンド。先頭に `bash` を付けず単独で → 7-2a） |
 | ready 化 → CI 待ち → マージ | `scripts/ci/ready_wait_merge.sh <PR番号>`（バックグラウンド。先頭に `bash` を付けず単独で → 7-2b） |
 | draft に戻す（CI 赤） | `update_pull_request(draft=true)` |
 | オーナーマージ対象の印 | `issue_write` でラベル `needs-owner-merge` を付ける |

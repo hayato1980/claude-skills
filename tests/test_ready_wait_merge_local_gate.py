@@ -317,3 +317,35 @@ class TestSkipLocalGate:
         assert fake.comments == []
         assert "省略するもの" in proc.stdout
         assert (fake.ready_calls, fake.merge_calls) == (1, 1)
+
+
+class TestNoMerge:
+    """--no-merge: ready 化して CI を見届け、green でもマージせずに止める（review-dialogue 7-2a 用）。"""
+
+    def test_green_stops_without_merging_and_exits_zero(self, repo: Path, fake_github: tuple[FakeGitHub, str]) -> None:
+        fake, api = fake_github
+
+        proc = run_script(repo, api, "--no-merge", str(PR))
+
+        assert proc.returncode == 0, proc.stderr
+        assert (fake.ready_calls, fake.merge_calls) == (1, 0)
+        assert "マージせずに止めます" in proc.stdout
+
+    def test_failing_local_gate_still_stops_before_ready(self, repo: Path, fake_github: tuple[FakeGitHub, str]) -> None:
+        fake, api = fake_github
+        set_gate_doc(repo, GATE_DOC_WITH_COMMANDS.format(commands="- `exit 3`"))
+        sync_fake_head_to_local(repo, fake)
+
+        proc = run_script(repo, api, "--no-merge", str(PR))
+
+        assert proc.returncode != 0
+        assert (fake.ready_calls, fake.merge_calls) == (0, 0)
+
+    def test_repo_without_local_gate_config_is_readied_as_before(self, repo: Path, fake_github: tuple[FakeGitHub, str]) -> None:
+        fake, api = fake_github
+
+        proc = run_script(repo, api, "--no-merge", str(PR))
+
+        assert proc.returncode == 0, proc.stderr
+        assert fake.ready_calls == 1
+        assert not any("手元ゲート" in line for line in proc.stdout.splitlines())
