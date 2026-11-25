@@ -19,6 +19,7 @@ import importlib.util
 import re
 import sys
 from pathlib import Path
+from types import ModuleType
 
 CHECKER = Path(__file__).resolve().parents[2] / ".github" / "actions" / "check-agent-headings" / "check_agent_headings.py"
 
@@ -29,12 +30,12 @@ README_ROW = re.compile(r"^\|\s*`(docs/agents/[^`]+)`\s*\|(.*)$")
 NOT_A_CONTRACT = {"Standards", "Spec"}
 
 
-def load_checker():  # noqa: ANN201
-    loader = importlib.util.spec_from_file_location("check_agent_headings", CHECKER)
-    if loader is None or loader.loader is None:
+def load_checker() -> ModuleType:
+    spec = importlib.util.spec_from_file_location("check_agent_headings", CHECKER)
+    if spec is None or spec.loader is None:
         raise ImportError(f"チェッカーを読めません: {CHECKER}")
-    module = importlib.util.module_from_spec(loader)
-    loader.loader.exec_module(module)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
     return module
 
 
@@ -64,7 +65,11 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--plugin-root", type=Path, required=True)
     args = parser.parse_args(argv)
 
-    checker = load_checker()
+    try:
+        checker = load_checker()
+    except (ImportError, OSError) as exc:
+        print(f"読めません: {exc}", file=sys.stderr)
+        return 3
     try:
         files = checker.load_spec(args.spec)
         referenced = referenced_headings(args.plugin_root)
@@ -72,7 +77,7 @@ def main(argv: list[str]) -> int:
     except checker.SpecError as exc:
         print(exc, file=sys.stderr)
         return 3
-    except OSError as exc:
+    except (ImportError, OSError) as exc:
         print(f"読めません: {exc}", file=sys.stderr)
         return 3
 

@@ -6,7 +6,6 @@
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import subprocess
 import sys
@@ -18,12 +17,6 @@ from conftest import PLUGIN, REPO_ROOT, SCRIPTS
 
 SCRIPT = REPO_ROOT / ".github" / "actions" / "check-agent-headings" / "check_agent_headings.py"
 SPEC = PLUGIN / "agent-headings.json"
-
-# 見出しの一覧の読み方（検証・平らにする規則）はチェッカー自身のものを使う。テストに別実装を持たない。
-_loader = importlib.util.spec_from_file_location("check_agent_headings", SCRIPT)
-assert _loader is not None and _loader.loader is not None
-checker = importlib.util.module_from_spec(_loader)
-_loader.loader.exec_module(checker)
 
 
 def run(spec: Path, root: Path, *ignore: str) -> subprocess.CompletedProcess[str]:

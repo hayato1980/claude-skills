@@ -32,14 +32,15 @@ def make_world(tmp_path: Path, *, files: object = SPEC_FILES, readme: str = READ
     return tmp_path
 
 
-def run(root: Path) -> subprocess.CompletedProcess[str]:
-    cmd = [
-        sys.executable,
-        str(SCRIPT),
-        "--spec", str(root / "plugin" / "agent-headings.json"),
-        "--readme", str(root / "README.md"),
-        "--plugin-root", str(root / "plugin"),
-    ]
+def run(root: Path, *, script: Path = SCRIPT, **overrides: Path) -> subprocess.CompletedProcess[str]:
+    """3 つの入力は root から導く。壊れた入力を試すテストだけ、overrides（spec / readme / plugin_root）で差し替える。"""
+    paths = {
+        "spec": root / "plugin" / "agent-headings.json",
+        "readme": root / "README.md",
+        "plugin-root": root / "plugin",
+    }
+    paths |= {k.replace("_", "-"): v for k, v in overrides.items()}
+    cmd = [sys.executable, str(script)] + [x for k, v in paths.items() for x in (f"--{k}", str(v))]
     return subprocess.run(cmd, capture_output=True, text=True, check=False)
 
 
@@ -91,21 +92,19 @@ def test_broken_spec_is_a_usage_error_not_a_silent_pass(tmp_path: Path) -> None:
     assert "Traceback" not in proc.stderr
 
 
-@pytest.mark.parametrize("flag", ["--spec", "--readme", "--plugin-root"])
-def test_missing_input_is_a_usage_error(tmp_path: Path, flag: str) -> None:
+@pytest.mark.parametrize("name", ["spec", "readme", "plugin_root"])
+def test_missing_input_is_a_usage_error(tmp_path: Path, name: str) -> None:
     root = make_world(tmp_path)
-    args = {
-        "--spec": root / "nope.json",
-        "--readme": root / "NOPE.md",
-        "--plugin-root": root / "nope",
-    }
-    paths = {
-        "--spec": root / "plugin" / "agent-headings.json",
-        "--readme": root / "README.md",
-        "--plugin-root": root / "plugin",
-    }
-    paths[flag] = args[flag]
-    cmd = [sys.executable, str(SCRIPT)] + [x for k, v in paths.items() for x in (k, str(v))]
-    proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    proc = run(root, **{name: root / "nope"})
+    assert proc.returncode == 3
+    assert "Traceback" not in proc.stderr
+
+
+def test_missing_checker_is_a_usage_error_not_a_crash(tmp_path: Path) -> None:
+    """読み方を借りるチェッカーが見つからないとき、「食い違いあり」(1) とも traceback とも区別できる 3 で終わる。"""
+    copy = tmp_path / "elsewhere" / "scripts" / "ci" / SCRIPT.name
+    copy.parent.mkdir(parents=True)
+    copy.write_text(SCRIPT.read_text(encoding="utf-8"), encoding="utf-8")
+    proc = run(make_world(tmp_path / "world"), script=copy)
     assert proc.returncode == 3
     assert "Traceback" not in proc.stderr
