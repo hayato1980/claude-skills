@@ -32,6 +32,7 @@ class FakeGitHub:
     head_sha: str
     draft: bool = True
     comment_status: int = 201
+    conclusion: str = "success"
     requests: list[tuple[str, str, str]] = field(default_factory=list)
     _check_runs_calls: int = 0
 
@@ -58,7 +59,7 @@ class FakeGitHub:
             # draft の最初の 1 回は baseline 取得（run 無し）。以後は baseline より新しい成功 run を返す。
             if self.draft and self._check_runs_calls == 1:
                 return 200, {"check_runs": []}
-            run = {"id": 5, "name": "gate", "status": "completed", "conclusion": "success", "html_url": "u"}
+            run = {"id": 5, "name": "gate", "status": "completed", "conclusion": self.conclusion, "html_url": "u"}
             return 200, {"check_runs": [run]}
         if method == "POST" and path == "/graphql":
             return 200, {"data": {"markPullRequestReadyForReview": {"pullRequest": {"number": PR, "isDraft": False}}}}
@@ -322,7 +323,10 @@ class TestSkipLocalGate:
 class TestNoMerge:
     """--no-merge: ready 化して CI を見届け、green でもマージせずに止める（review-dialogue 7-2a 用）。"""
 
-    def test_green_stops_without_merging_and_exits_zero(self, repo: Path, fake_github: tuple[FakeGitHub, str]) -> None:
+    def test_green_without_local_gate_config_readies_and_stops_without_merging(
+        self, repo: Path, fake_github: tuple[FakeGitHub, str]
+    ) -> None:
+        # `repo` フィクスチャは手元ゲートの設定（`## ready 前に実行するコマンド`）を持たない = 7-2a が今までと変わらない前提。
         fake, api = fake_github
 
         proc = run_script(repo, api, "--no-merge", str(PR))
@@ -330,6 +334,17 @@ class TestNoMerge:
         assert proc.returncode == 0, proc.stderr
         assert (fake.ready_calls, fake.merge_calls) == (1, 0)
         assert "マージせずに止めます" in proc.stdout
+        assert "手元ゲート" not in proc.stdout
+
+    def test_red_reports_like_before_and_does_not_merge(self, repo: Path, fake_github: tuple[FakeGitHub, str]) -> None:
+        fake, api = fake_github
+        fake.conclusion = "failure"
+
+        proc = run_script(repo, api, "--no-merge", str(PR))
+
+        assert proc.returncode == 1
+        assert "CI red。マージしません。" in proc.stderr
+        assert (fake.ready_calls, fake.merge_calls) == (1, 0)
 
     def test_failing_local_gate_still_stops_before_ready(self, repo: Path, fake_github: tuple[FakeGitHub, str]) -> None:
         fake, api = fake_github
@@ -340,12 +355,3 @@ class TestNoMerge:
 
         assert proc.returncode != 0
         assert (fake.ready_calls, fake.merge_calls) == (0, 0)
-
-    def test_repo_without_local_gate_config_is_readied_as_before(self, repo: Path, fake_github: tuple[FakeGitHub, str]) -> None:
-        fake, api = fake_github
-
-        proc = run_script(repo, api, "--no-merge", str(PR))
-
-        assert proc.returncode == 0, proc.stderr
-        assert fake.ready_calls == 1
-        assert not any("手元ゲート" in line for line in proc.stdout.splitlines())

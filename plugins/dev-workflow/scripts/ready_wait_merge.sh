@@ -16,7 +16,7 @@
 # 対象リポ: 環境変数 READY_MERGE_REPO_ROOT、無ければカレントの git 作業ツリー。
 # 各リポの scripts/ci/ready_wait_merge.sh（中継）が READY_MERGE_REPO_ROOT を渡す。
 #
-# 使い方: ready_wait_merge.sh [--no-merge] [--skip-local-gate "<理由>"] [PR番号]
+# 使い方: ready_wait_merge.sh [--no-merge] [--skip-local-gate "<理由>"] [PR番号]（下の USAGE と同じ）
 #   --no-merge: ready 化して CI を見届け、green でもマージせずに終了コード 0 で止める
 #   （review-dialogue の 7-2a = needs-owner-merge の PR 用。マージはオーナーが行う）。
 #   PR番号 省略時は現在の git ブランチに対応する open PR を自動解決する。
@@ -169,6 +169,8 @@ run_local_gate() {
 }
 
 # ---- 引数の解釈 ----
+readonly USAGE='ready_wait_merge.sh [--no-merge] [--skip-local-gate "<理由>"] [PR番号]'
+
 # 形: ready_wait_merge.sh [--skip-local-gate "<理由>"] [PR番号]（順不同）。
 # 抜け道なので、理由なしは API を 1 つも呼ぶ前に拒否する（直後が無い・空・空白だけ・`--` 始まり）。
 PR_NUMBER=""
@@ -189,7 +191,7 @@ while [ $# -gt 0 ]; do
       shift 2
       ;;
     -*)
-      echo "未知のオプションです: '$1'（使い方: ready_wait_merge.sh [--no-merge] [--skip-local-gate \"<理由>\"] [PR番号]）" >&2
+      echo "未知のオプションです: '$1'（使い方: ${USAGE}）" >&2
       exit 1
       ;;
     *)
