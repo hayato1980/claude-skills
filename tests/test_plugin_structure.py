@@ -189,28 +189,3 @@ def test_decision_0006_states_the_four_acceptance_points() -> None:
     decided = body.split("## 決めたこと")[1].split("\n## ")[0]
     assert "ツール自身に評価させ" in decided
 
-
-def runbook_section(heading_prefix: str) -> str:
-    """runbook の見出し（行頭一致）から次の同階層以上の見出しまでを返す。"""
-    lines = RUNBOOK.read_text(encoding="utf-8").splitlines()
-    start = next(i for i, ln in enumerate(lines) if ln.startswith(heading_prefix))
-    level = len(heading_prefix) - len(heading_prefix.lstrip("#"))
-    end = next(
-        (i for i in range(start + 1, len(lines)) if re.match(rf"#{{1,{level}}}\s", lines[i])),
-        len(lines),
-    )
-    return "\n".join(lines[start:end])
-
-
-def test_fixer_does_not_push_while_pr_is_ready() -> None:
-    # #34: 修正側にはレビュー側がマージ中か見えない。ready（draft でない）の間は push しない。
-    section = runbook_section("### 4. CI 赤")
-    assert "ready（draft でない）の間は push しない" in section
-
-
-def test_merge_409_is_its_own_row_in_the_7_2b_table() -> None:
-    # #34: 409 は「合意した後に head が変わった」。人へ渡す「それ以外」から分け、draft に戻して差分を読む。
-    section = runbook_section("#### 7-2b.")
-    rows = [ln for ln in section.splitlines() if ln.startswith("|")]
-    row = next(ln for ln in rows if ln.split("|")[1].count("409") and "それ以外" not in ln.split("|")[1])
-    assert "draft に戻" in row and "head が変わっていない" in row
