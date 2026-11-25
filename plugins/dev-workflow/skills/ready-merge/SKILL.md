@@ -1,16 +1,16 @@
 ---
 name: ready-merge
 description: "draft PR を ready 化 → CI 完了待ち → 判定 → （成功時のみ）マージする。オーナーが /ready-merge [PR番号] と打ったときだけ動く。"
-argument-hint: "[--skip-local-gate \"<理由>\"] [PR番号]"
+argument-hint: "[--no-merge] [--skip-local-gate \"<理由>\"] [PR番号]"
 disable-model-invocation: true
 allowed-tools: Bash(scripts/ci/ready_wait_merge.sh*)
 ---
 
-Use this skill when: the owner types `/ready-merge [--skip-local-gate "<理由>"] [PR番号]` to run the PR merge gate by hand.
+Use this skill when: the owner types `/ready-merge [--no-merge] [--skip-local-gate "<理由>"] [PR番号]` to run the PR merge gate by hand.
 
 対象: $ARGUMENTS
 
-`scripts/ci/ready_wait_merge.sh` を実行する。PR 番号・`--skip-local-gate "<理由>"` が指定されていれば、そのまま引数として渡す（順不同）。省略されたら引数なしで呼ぶ
+`scripts/ci/ready_wait_merge.sh` を実行する。PR 番号・`--skip-local-gate "<理由>"` が指定されていれば、そのまま引数として渡す（順不同。`--no-merge` も同様）。省略されたら引数なしで呼ぶ
 （スクリプトが現在の git ブランチから対応する open PR を自動解決する）。
 
 **先頭に `bash` を付けず、ほかのコマンドと `&&` でつながず、単独で呼ぶ。** 許可ルール
@@ -36,7 +36,9 @@ Use this skill when: the owner types `/ready-merge [--skip-local-gate "<理由>"
 1. （draft の PR だけ・設定のあるリポだけ）手元ゲートを実行する。手元の HEAD が PR の head と一致し、作業ツリーに未コミットの変更が無いことを先に確かめ、満たさなければコマンドを走らせず ready にしない。いずれかのコマンドが非 0 でも ready にしない。すでに ready の PR では CI が走り済みなので実行しない
 2. PR を ready 化する（GraphQL。Claude Code のセッション経由で agent proxy が 403 で止めたときだけ REST shim へフォールバック）
 3. 30 秒間隔・最大 40 分で CI の check run を見て、`docs/agents/pr-merge-gate.md` のジョブがすべて success になるのを待つ
-4. green なら、判定した head SHA を指定して squash マージする（待機中に push が入って head が変わっていたら GitHub が 409 を返し、マージしない）
+4. `--no-merge` が無く green なら、判定した head SHA を指定して squash マージする（待機中に push が入って head が変わっていたら GitHub が 409 を返し、マージしない）
+
+`--no-merge` 付きでは手順 3 の green で「CI green。マージせずに止めます。」と出して終了コード 0 で終わる（マージの API は呼ばない）。赤・タイムアウト等の出力と終了コードは付けないときと同じ。
 
 赤・タイムアウト・判定不能のときはマージしない。draft へ戻すのはスクリプトの仕事ではない（戻すのは CI 側のジョブか、
 `review-dialogue` のレビュー側）。
@@ -49,8 +51,8 @@ Use this skill when: the owner types `/ready-merge [--skip-local-gate "<理由>"
 
 ## 誰が叩くか
 
-- `review-dialogue` で合意に至ったレビュー側（モデル）が、runbook の手順 7-2b に従って叩く。`needs-owner-merge`
-  ラベル付きの PR には叩かず、ready 化で止める。
+- `review-dialogue` で合意に至ったレビュー側（モデル）が、runbook の手順 7-2a / 7-2b に従って叩く。`needs-owner-merge`
+  ラベル付きの PR には `--no-merge` を付けて叩き、ready 化して CI を見届けたところで止める（マージはオーナー）。
 - オーナーが手元で `/ready-merge` と打つ。このスキルは `disable-model-invocation: true` なので、
   モデルが自分で `Skill(ready-merge)` を呼ぶことはない（モデルはスクリプトを直接叩く）。
 

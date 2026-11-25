@@ -16,7 +16,9 @@
 # 対象リポ: 環境変数 READY_MERGE_REPO_ROOT、無ければカレントの git 作業ツリー。
 # 各リポの scripts/ci/ready_wait_merge.sh（中継）が READY_MERGE_REPO_ROOT を渡す。
 #
-# 使い方: ready_wait_merge.sh [--skip-local-gate "<理由>"] [PR番号]
+# 使い方: ready_wait_merge.sh [--no-merge] [--skip-local-gate "<理由>"] [PR番号]（下の USAGE と同じ）
+#   --no-merge: ready 化して CI を見届け、green でもマージせずに終了コード 0 で止める
+#   （review-dialogue の 7-2a = needs-owner-merge の PR 用。マージはオーナーが行う）。
 #   PR番号 省略時は現在の git ブランチに対応する open PR を自動解決する。
 set -euo pipefail
 
@@ -167,12 +169,19 @@ run_local_gate() {
 }
 
 # ---- 引数の解釈 ----
+readonly USAGE='ready_wait_merge.sh [--no-merge] [--skip-local-gate "<理由>"] [PR番号]'
+
 # 形: ready_wait_merge.sh [--skip-local-gate "<理由>"] [PR番号]（順不同）。
 # 抜け道なので、理由なしは API を 1 つも呼ぶ前に拒否する（直後が無い・空・空白だけ・`--` 始まり）。
 PR_NUMBER=""
 SKIP_LOCAL_GATE_REASON=""
+NO_MERGE=false
 while [ $# -gt 0 ]; do
   case "$1" in
+    --no-merge)
+      NO_MERGE=true
+      shift
+      ;;
     --skip-local-gate)
       if [ $# -lt 2 ] || [ -z "${2//[[:space:]]/}" ] || [[ "$2" == --* ]]; then
         echo "--skip-local-gate には理由が必須です（例: --skip-local-gate \"別 PR で検査済み\"）。理由なしでは手元ゲートを省略できません。" >&2
@@ -182,7 +191,7 @@ while [ $# -gt 0 ]; do
       shift 2
       ;;
     -*)
-      echo "未知のオプションです: '$1'（使い方: ready_wait_merge.sh [--skip-local-gate \"<理由>\"] [PR番号]）" >&2
+      echo "未知のオプションです: '$1'（使い方: ${USAGE}）" >&2
       exit 1
       ;;
     *)
@@ -195,7 +204,7 @@ while [ $# -gt 0 ]; do
       ;;
   esac
 done
-readonly SKIP_LOCAL_GATE_REASON
+readonly SKIP_LOCAL_GATE_REASON NO_MERGE
 
 # ---- PR 番号の解決 ----
 if [ -n "$PR_NUMBER" ]; then
@@ -345,6 +354,10 @@ while :; do
   case "$judge_exit" in
     0)
       echo "$judge_output"
+      if [ "$NO_MERGE" = "true" ]; then
+        echo "CI green。マージせずに止めます。"
+        exit 0
+      fi
       echo "CI green。マージします。"
       break
       ;;
