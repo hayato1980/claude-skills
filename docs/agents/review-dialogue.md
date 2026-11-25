@@ -26,6 +26,7 @@
 ```bash
 shellcheck plugins/dev-workflow/scripts/*.sh plugins/dev-workflow/hooks/*.sh plugins/dev-workflow/templates/*.sh
 python -m pytest tests -q
+python scripts/ci/check_heading_references.py --spec plugins/dev-workflow/agent-headings.json --readme README.md --plugin-root plugins/dev-workflow
 npx --yes @anthropic-ai/claude-code plugin validate .
 ```
 

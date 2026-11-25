@@ -72,7 +72,7 @@
 
 見出しの照合は**行の完全一致**（行末の空白・CR は不一致）。スキル側が行の完全一致で読むのと同じ規則にしてある。
 
-必須の見出しの一覧は [`plugins/dev-workflow/agent-headings.json`](./plugins/dev-workflow/agent-headings.json) の 1 か所だけ。スキルを足したり見出しを変えたりしたら一覧も直す（`tests/test_agent_headings.py` が一覧とスキル本文の食い違いを落とす）。
+必須の見出しの一覧は [`plugins/dev-workflow/agent-headings.json`](./plugins/dev-workflow/agent-headings.json) の 1 か所だけ。スキルを足したり見出しを変えたりしたら一覧も直す（`scripts/ci/check_heading_references.py` が、CI のステップで一覧・この README の表・スキル本文の食い違いを落とす）。
 
 ### 各リポに置く中継スクリプト
 
