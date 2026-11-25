@@ -2,7 +2,7 @@
 name: create-ccw-session
 description: "起票済みの GitHub issue を、オーナーが承認したフロー（指定が無ければ親が案を出す）で子の CCW（Claude Code Web）セッションへ払い出す。「この issue を CCW で進めて」「#NNN を tdd で払い出して」「#NNN を review-dialogue に出して」「子セッションを立てて」で発動。"
 argument-hint: "#683 [#684 ...] [フロー語 (tdd|review-dialogue|diagnosing-bugs|grill-with-docs|...)]"
-allowed-tools: mcp__github__issue_read, mcp__claude-code-remote__create_session, mcp__claude-code-remote__get_session, mcp__claude-code-remote__list_sessions, Bash(grep:*), Bash(jq:*), Bash(ls:*), Bash(find:*), Bash(sort:*), Bash(tail:*), Read
+allowed-tools: mcp__github__issue_read, mcp__github__pull_request_read, mcp__claude-code-remote__create_session, mcp__claude-code-remote__set_session_tags, mcp__claude-code-remote__get_session, mcp__claude-code-remote__list_sessions, Bash(grep:*), Bash(jq:*), Bash(ls:*), Bash(find:*), Bash(sort:*), Bash(tail:*), Read
 ---
 
 Use this skill when: handing an already-filed GitHub issue to a child CCW session, on a flow the owner has approved, instead of doing the work in this session.
@@ -303,8 +303,16 @@ PR のときの `create_session` の引数は次のとおり。ほかは上の�
 | `prompt` | ``PR #<PR番号> に取り組む。Skill ツールで `dev-workflow:review-dialogue` を引数 `#<PR番号>` で発動する。`` — 読み替えの指示は書かない |
 | `source_revision` / `outcome_branch` | PR の **head ブランチ名**そのもの（`pull_request_read` で読む） |
 
-**修正側は、その PR を作ったセッション。** `issue-<番号>` タグを持たないので、往復の「相手を引く」は `pr-<PR番号>` タグで引く
-（→ [runbook](../review-dialogue/runbook.md)「ラウンドの閉じ方」手順 1）。`pr-<PR番号>` タグは `session-closeout` の束ねの対象にもなる。
+**修正側は、その PR を作ったセッション（＝払い出すこのセッション自身）。** 修正側は `pr-<PR番号>` タグを持たないので、
+**`create_session` の前に自分へ付ける**:
+
+```
+mcp__claude-code-remote__set_session_tags(session_ids=["<自分の session id>"], add=["pr-<PR番号>"])
+```
+
+自分の id は `get_session()` を `session_id` 省略で呼んで読む。これを飛ばすと、レビュー側が「相手を引く」で 0 行になり
+ポークが出ず、往復が片方向になる。付けておけば、往復の「相手を引く」（→ [runbook](../review-dialogue/runbook.md)「ラウンドの閉じ方」手順 1）は
+双方向で `pr-<PR番号>` で引け、`session-closeout` の束ねにも両側が入る。
 
 ### PR 作成後の自動レビュー払い出し
 

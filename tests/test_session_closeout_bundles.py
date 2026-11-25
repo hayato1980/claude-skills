@@ -124,7 +124,7 @@ class TestGroup:
         rows = [_row("a", tags=["issue-1"]), _row("b", tags=["issue-2"])]
         g = group([parse_page(_page_json(rows))], self_id=None, issues={2}, repo=REPO)
         assert list(g.bundles) == [2]
-        assert g.excluded[0][1] == "引数で指定した issue ではない"
+        assert g.excluded[0][1] == "引数で指定した issue / PR ではない"
 
     def test_same_session_on_two_pages_counted_once(self) -> None:
         p = parse_page(_page_json([_row("a", tags=["issue-1"])]))
@@ -258,7 +258,7 @@ class TestIssueFilterWithoutSessionContext:
         rows = [_list_row("a", tags=["issue-1"]), _list_row("b", tags=["issue-2"])]
         g = group([parse_page(_page_json(rows))], None, {2}, REPO)
         assert [s.id for s in g.needs_context] == ["b"]
-        assert [(s.id, r) for s, r in g.excluded] == [("a", "引数で指定した issue ではない")]
+        assert [(s.id, r) for s, r in g.excluded] == [("a", "引数で指定した issue / PR ではない")]
 
 
 class TestPrTaggedSessions:

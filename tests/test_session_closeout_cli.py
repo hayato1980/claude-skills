@@ -242,3 +242,14 @@ class TestPrBundle:
         out = json.loads(capsys.readouterr().out)
         assert [b["pr"] for b in out["pr_bundles"]] == [37]
         assert out["bundles"] == []
+
+    def test_reviewer_only_pr_bundle_is_judged_and_shown(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        # 修正側が pr タグを持たない（付け忘れ）形でも、レビュー側だけで束になり判定・表示できる。
+        page = _write(tmp_path, "p", [_row("rev", ["review-dialogue", "pr-36"], self.HEAD)], has_more=False, last_id="rev")
+        assert main(["--repo", REPO, str(page)], fetch=_merged, fetch_pr=self._pr(merged=True)) == 0
+        assert "| PR #36 | 終了 | PR #36 merged | 無し | #36(merged) | rev（レビュー側 / completed） |" in capsys.readouterr().out
+
+    def test_session_outside_pr_filter_says_issue_or_pr(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        page = _write(tmp_path, "p", [_row("a", ["pr-36"]), _row("b", ["pr-37"])], has_more=False, last_id="b")
+        assert main(["--repo", REPO, str(page), "--pr", "37"], fetch=_merged, fetch_pr=self._pr(merged=True)) == 0
+        assert "対象外: a — 引数で指定した issue / PR ではない" in capsys.readouterr().out

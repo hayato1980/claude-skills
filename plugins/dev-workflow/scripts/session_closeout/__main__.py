@@ -134,18 +134,19 @@ def _render_json(grouping: Grouping, states: dict[int, IssueState], verdicts: di
     return json.dumps(out, ensure_ascii=False, indent=2)
 
 
-def _github_from_env(repo: str) -> Fetch:
+def _github_token() -> str:
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
     if not token:
         raise ValueError("GH_TOKEN（または GITHUB_TOKEN）が未設定です。")
-    return github_fetcher(repo, token)
+    return token
+
+
+def _github_from_env(repo: str) -> Fetch:
+    return github_fetcher(repo, _github_token())
 
 
 def _github_pr_from_env(repo: str) -> FetchPr:
-    token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
-    if not token:
-        raise ValueError("GH_TOKEN（または GITHUB_TOKEN）が未設定です。")
-    return github_pr_fetcher(repo, token)
+    return github_pr_fetcher(repo, _github_token())
 
 
 def main(argv: list[str] | None = None, fetch: Fetch | None = None, fetch_pr: FetchPr | None = None) -> int:

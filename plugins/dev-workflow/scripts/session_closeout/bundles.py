@@ -219,6 +219,11 @@ class Grouping:
     truncated_after: int | None = None  # 打ち切ったとき、続けて読んだアーカイブ済みだけのページ数
 
 
+def _wanted(n: int, only: set[int] | None, narrowed: bool) -> bool:
+    """絞り込みが無ければ全部、絞り込みがあれば `only` に入っているものだけ（渡していない側の種類は対象にしない）。"""
+    return n in only if only is not None else not narrowed
+
+
 def group(pages: list[Page], self_id: str | None, issues: set[int] | None, repo: str,
           truncated_after: int | None = None, prs: set[int] | None = None) -> Grouping:
     """archive 済み・自分・別リポのセッションを除き、`issue-<番号>` タグで束ねる。同じ id は 1 回だけ数える。"""
@@ -245,10 +250,10 @@ def group(pages: list[Page], self_id: str | None, issues: set[int] | None, repo:
                 continue
             # --issue / --pr のどちらかを渡したら、渡していない側の種類は対象にしない。
             narrowed = issues is not None or prs is not None
-            targets = [n for n in numbers if issues is None and not narrowed or issues is not None and n in issues]
-            pr_targets = [n for n in pr_numbers if prs is None and not narrowed or prs is not None and n in prs]
+            targets = [n for n in numbers if _wanted(n, issues, narrowed)]
+            pr_targets = [n for n in pr_numbers if _wanted(n, prs, narrowed)]
             if not targets and not pr_targets:
-                excluded.append((s, "引数で指定した issue ではない"))
+                excluded.append((s, "引数で指定した issue / PR ではない"))
                 continue
             if not s.context_known:
                 needs_context.append(s)
