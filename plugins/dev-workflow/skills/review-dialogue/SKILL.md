@@ -20,7 +20,7 @@ Use this skill when: acting as the review side of a payout for issue #NNN. The u
 
 ## 前提
 
-対象 issue の実装ブランチ `claude/issue-<番号>` が `source_revision` としてチェックアウド済み（→ `create-ccw-session` の「レビューの払い出し」）。このブランチを `head` とする open PR が対象。
+対象の実装ブランチ（issue なら `claude/issue-<番号>`、issue を持たない PR ならその head ブランチ名）が `source_revision` としてチェックアウド済み（→ `create-ccw-session` の「レビューの払い出し」）。このブランチを `head` とする open PR が対象。
 
 ## 手順
 
@@ -35,7 +35,7 @@ git merge-base HEAD origin/main
 
 ### 2. 対象 PR を特定する
 
-`head` が `claude/issue-<番号>` の open PR を GitHub 側で探す（`mcp__github__pull_request_read` / `list_pull_requests`）。
+引数 `#<番号>` は issue 番号と PR 番号のどちらでもよい。`mcp__github__issue_read` で引き、結果に `pull_request` があれば**その番号が PR**（head ブランチ名は `pull_request_read` で読む）。無ければ issue なので、`head` が `claude/issue-<番号>` の open PR を GitHub 側で探す（`mcp__github__list_pull_requests`）。
 
 ### 3. 上流 `mattpocock-skills:code-review` を呼ぶ
 

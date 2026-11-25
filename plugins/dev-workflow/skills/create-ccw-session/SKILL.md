@@ -79,6 +79,10 @@ Use this skill when: handing an already-filed GitHub issue to a child CCW sessio
 | 設定が「払い出さない」とするラベル（`ready-for-human` / `blocked-upstream` / `wontfix` 等）が付いている | **払い出さない。** 理由をユーザーに伝えて終わる |
 | 設定が「止めて聞く」とするラベル（`needs-triage` / `needs-info` 等）が付いている、または**ラベルが無い** | 推測で払い出さない。triage を通すか、それでも払い出すかをユーザーに聞いて止まる |
 
+**issue を持たない PR のレビュー払い出し（`#<PR番号>`）では、門は PR のラベルで行う。** PR にラベルが付いていないことが多いが、
+これは「ラベルが無い」の「止めて聞く」には**当てない**（PR は既にオーナー自身が作って出した成果物で、triage の対象ではない）。
+「払い出さない」「止めて聞く」の一覧に載るラベルが PR に付いているときだけ、上の表どおりに止める。ラベルが無ければ払い出す。
+
 **この門は `review-dialogue` の払い出しにも同じく効く。** 実装が `ready-for-human` で止まった issue は、
 レビューを出しても進まない。ただし、往復が決裂・打ち切りで人へ渡されて `ready-for-human` が付いた PR は別で、
 そちらは人が裁定する（→ [runbook](../review-dialogue/runbook.md)）。
@@ -284,6 +288,23 @@ create_session(
 **親は払い出した子の往復を監視しない。** [手順 7](#手順) の「進捗の監視はしない」が禁じているのはそれであって、
 **自分が作った PR への応答ではない**。オーナーがこのセッションで直接実装して PR を作り、レビューだけを払い出した
 場合、**修正側はこのセッション自身**になる（役割はセッションの出自ではなく PR に対する立場に宿る）。
+
+### issue を持たない PR のレビュー払い出し
+
+オーナーが直接作業で作った PR（head がハーネスの乱数のブランチ名で `claude/issue-<番号>` 型でない）は、
+[自動払い出し](#pr-作成後の自動レビュー払い出し)の対象外なので、オーナーが `#<PR番号>` を渡して手で払い出す。
+引数が issue か PR かは、`mcp__github__issue_read` の結果に `pull_request` があるかで決める（GitHub は PR も同じ番号で issue として返す）。
+PR のときの `create_session` の引数は次のとおり。ほかは上の表と同じ。
+
+| 引数 | 値 |
+|---|---|
+| `title` | `PR #<番号> [review-dialogue] <PR タイトル逐語>` |
+| `tags` | `["review-dialogue", "pr-<PR番号>", "<第 3 要素>"]`（第 3 要素は上の表と同じ決め方） |
+| `prompt` | ``PR #<PR番号> に取り組む。Skill ツールで `dev-workflow:review-dialogue` を引数 `#<PR番号>` で発動する。`` — 読み替えの指示は書かない |
+| `source_revision` / `outcome_branch` | PR の **head ブランチ名**そのもの（`pull_request_read` で読む） |
+
+**修正側は、その PR を作ったセッション。** `issue-<番号>` タグを持たないので、往復の「相手を引く」は `pr-<PR番号>` タグで引く
+（→ [runbook](../review-dialogue/runbook.md)「ラウンドの閉じ方」手順 1）。`pr-<PR番号>` タグは `session-closeout` の束ねの対象にもなる。
 
 ### PR 作成後の自動レビュー払い出し
 

@@ -87,7 +87,7 @@ class TestOutput:
         assert lines[2] == ("| #7 | 終了 | PR #107 merged | closed | #107(merged) | "
                             "impl（修正側 / completed）<br>rev（レビュー側 / completed） |")
         assert "対象外: me — 自分自身" in lines
-        assert "対象外: hand — issue-<番号> タグが無い（手で開いたセッション）" in lines
+        assert "対象外: hand — issue-<番号> / pr-<番号> タグが無い（手で開いたセッション）" in lines
 
     def test_json(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         assert main(["--repo", REPO, str(self._page(tmp_path)), "--self-id", "me", "--format", "json"], fetch=_merged) == 0
@@ -202,3 +202,43 @@ class TestTruncation:
 
     def test_without_enough_archived_pages_still_incomplete(self, tmp_path: Path) -> None:
         assert main(["--repo", REPO, str(self._archived_page(tmp_path, "p1"))], fetch=_merged) == EXIT_INCOMPLETE
+
+
+class TestPrBundle:
+    """issue を持たない PR（`pr-<番号>` タグ）の束。判定は PR の state、役割は PR の head ブランチ名＝revision（#25）。"""
+
+    HEAD = "claude/sweet-hopper-xfhls6"
+
+    def _page(self, tmp_path: Path) -> Path:
+        rows = [_row("impl", ["pr-36"], "main"), _row("rev", ["review-dialogue", "pr-36"], self.HEAD)]
+        return _write(tmp_path, "p", rows, has_more=False, last_id="rev")
+
+    def _pr(self, *, merged: bool, state: str = "closed", draft: bool = False) -> Any:
+        return lambda n: PullRequest(number=n, state=state, merged=merged, draft=draft, head=self.HEAD)
+
+    def test_merged_pr_bundle_is_done_with_roles_from_head_branch(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        rc = main(["--repo", REPO, str(self._page(tmp_path)), "--format", "json"],
+                  fetch=_merged, fetch_pr=self._pr(merged=True))
+        assert rc == 0
+        out = json.loads(capsys.readouterr().out)
+        assert out["bundles"] == []
+        bundle = out["pr_bundles"][0]
+        assert (bundle["pr"], bundle["verdict"]["kind"]) == (36, "終了")
+        assert [(s["id"], s["role"]) for s in bundle["sessions"]] == [("impl", "修正側"), ("rev", "レビュー側")]
+
+    def test_open_pr_bundle_is_unfinished_in_table(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        rc = main(["--repo", REPO, str(self._page(tmp_path))], fetch=_merged,
+                  fetch_pr=self._pr(merged=False, state="open", draft=True))
+        assert rc == 0
+        assert "| PR #36 | 未了 | PR #36 が draft |" in capsys.readouterr().out
+
+    def test_pr_filter_narrows_to_that_pr(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        rows = [_row("a", ["pr-36"]), _row("b", ["pr-37"]), _row("c", ["issue-7"])]
+        page = _write(tmp_path, "p", rows, has_more=False, last_id="c")
+        assert main(["--repo", REPO, str(page), "--pr", "37", "--format", "json"],
+                    fetch=_merged, fetch_pr=self._pr(merged=True)) == 0
+        out = json.loads(capsys.readouterr().out)
+        assert [b["pr"] for b in out["pr_bundles"]] == [37]
+        assert out["bundles"] == []

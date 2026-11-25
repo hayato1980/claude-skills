@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
 ARCHIVED = "SESSION_STATUS_ARCHIVED"
 _ISSUE_TAG = re.compile(r"^issue-(\d+)$")
+_PR_TAG = re.compile(r"^pr-(\d+)$")
 _BUCKET_PREFIX = "SESSION_STATUS_BUCKET_"
 # 判定表（judge.py）が前提にしている値。これ以外は黙って「終了」に倒さず止める（アーカイブは戻しにくい副作用）。
 BUCKET_WORKING = _BUCKET_PREFIX + "WORKING"
@@ -63,6 +64,9 @@ class Session:
     def issue_numbers(self) -> list[int]:
         return [int(m.group(1)) for t in self.tags if (m := _ISSUE_TAG.match(t))]
 
+    def pr_numbers(self) -> list[int]:
+        return [int(m.group(1)) for t in self.tags if (m := _PR_TAG.match(t))]
+
     def in_repo(self, repo: str) -> bool:
         """source の URL が対象リポ（`owner/repo`）か。大文字小文字と `.git` は無視する。"""
         url = (self.repo_url or "").rstrip("/").removesuffix(".git")
@@ -70,7 +74,11 @@ class Session:
 
     def role(self, issue: int) -> str:
         """役割は revision で見る（tags のフロー語では見ない → dev-workflow の runbook「相手を引く」）。"""
-        return "レビュー側" if self.revision == issue_branch(issue) else "修正側"
+        return self.role_on(issue_branch(issue))
+
+    def role_on(self, head_branch: str) -> str:
+        """revision が対象ブランチ（issue なら `claude/issue-<番号>`、PR なら head ブランチ名）そのものならレビュー側。"""
+        return "レビュー側" if self.revision == head_branch else "修正側"
 
 
 @dataclass(frozen=True)
@@ -207,13 +215,15 @@ class Grouping:
     excluded: list[tuple[Session, str]]
     archived: int
     needs_context: list[Session]
+    pr_bundles: dict[int, list[Session]] = field(default_factory=dict)  # `pr-<番号>` タグの束（issue を持たない PR）
     truncated_after: int | None = None  # 打ち切ったとき、続けて読んだアーカイブ済みだけのページ数
 
 
 def group(pages: list[Page], self_id: str | None, issues: set[int] | None, repo: str,
-          truncated_after: int | None = None) -> Grouping:
+          truncated_after: int | None = None, prs: set[int] | None = None) -> Grouping:
     """archive 済み・自分・別リポのセッションを除き、`issue-<番号>` タグで束ねる。同じ id は 1 回だけ数える。"""
     bundles: dict[int, list[Session]] = {}
+    pr_bundles: dict[int, list[Session]] = {}
     excluded: list[tuple[Session, str]] = []
     archived = 0
     needs_context: list[Session] = []
@@ -229,12 +239,15 @@ def group(pages: list[Page], self_id: str | None, issues: set[int] | None, repo:
             if s.id == self_id:
                 excluded.append((s, "自分自身"))
                 continue
-            numbers = s.issue_numbers()
-            if not numbers:
-                excluded.append((s, "issue-<番号> タグが無い（手で開いたセッション）"))
+            numbers, pr_numbers = s.issue_numbers(), s.pr_numbers()
+            if not numbers and not pr_numbers:
+                excluded.append((s, "issue-<番号> / pr-<番号> タグが無い（手で開いたセッション）"))
                 continue
-            targets = [n for n in numbers if issues is None or n in issues]
-            if not targets:
+            # --issue / --pr のどちらかを渡したら、渡していない側の種類は対象にしない。
+            narrowed = issues is not None or prs is not None
+            targets = [n for n in numbers if issues is None and not narrowed or issues is not None and n in issues]
+            pr_targets = [n for n in pr_numbers if prs is None and not narrowed or prs is not None and n in prs]
+            if not targets and not pr_targets:
                 excluded.append((s, "引数で指定した issue ではない"))
                 continue
             if not s.context_known:
@@ -246,5 +259,7 @@ def group(pages: list[Page], self_id: str | None, issues: set[int] | None, repo:
                 continue
             for n in targets:
                 bundles.setdefault(n, []).append(s)
-    return Grouping(bundles=dict(sorted(bundles.items())), excluded=excluded, archived=archived, needs_context=needs_context,
+            for n in pr_targets:
+                pr_bundles.setdefault(n, []).append(s)
+    return Grouping(bundles=dict(sorted(bundles.items())), pr_bundles=dict(sorted(pr_bundles.items())), excluded=excluded, archived=archived, needs_context=needs_context,
                     truncated_after=truncated_after)

@@ -20,6 +20,7 @@ class PullRequest:
     state: str  # "open" | "closed"
     merged: bool
     draft: bool
+    head: str = ""  # head ブランチ名（PR 束の役割判定に使う）
 
 
 @dataclass(frozen=True)
@@ -66,3 +67,18 @@ def judge(sessions: list[Session], issue_state: IssueState) -> Verdict:
     if issue_open:
         return Verdict(READ_CONVERSATION, "PR 無し・issue open（最後のターンで成果を出し切っていれば終了）", True)
     return Verdict(DONE, "PR 無し・issue closed")
+
+
+def judge_pr(sessions: list[Session], pr: PullRequest) -> Verdict:
+    """issue を持たない PR の束。PR の state が材料（merged / 未マージで closed は終了、open は未了）。"""
+    if pr.state == "open":
+        return Verdict(UNFINISHED, f"PR #{pr.number} が {'draft' if pr.draft else 'open'}")
+    working = [s for s in sessions if s.bucket == BUCKET_WORKING]
+    if working:
+        return Verdict(UNFINISHED, f"{working[0].id} が working")
+    stuck = [s for s in sessions if s.bucket in _STUCK]
+    if stuck:
+        return Verdict(NEEDS_OWNER, f"{stuck[0].id} が status_bucket={bucket_short(stuck[0].bucket)}")
+    if pr.merged:
+        return Verdict(DONE, f"PR #{pr.number} merged")
+    return Verdict(DONE, f"PR #{pr.number} が未マージで closed")
