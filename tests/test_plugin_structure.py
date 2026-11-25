@@ -188,3 +188,4 @@ def test_decision_0006_states_the_four_acceptance_points() -> None:
         assert heading in body, heading
     decided = body.split("## 決めたこと")[1].split("\n## ")[0]
     assert "ツール自身に評価させ" in decided
+
