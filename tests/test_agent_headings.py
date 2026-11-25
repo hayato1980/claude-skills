@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import importlib.util
 import json
-import re
 import subprocess
 import sys
 from pathlib import Path
@@ -184,54 +183,9 @@ def test_malformed_entry_is_a_usage_error_without_a_traceback(tmp_path: Path, en
     assert "Traceback" not in proc.stderr
 
 
-# --- 一覧とスキル本文の整合 -----------------------------------------------------
+# --- 一覧の形 -------------------------------------------------------------------
 
-BACKTICKED_HEADING = re.compile(r"`## ([^`]+)`")
-
-# 上流の code-review が返す出力の見出し。利用側の docs/agents との契約ではない。
-NOT_A_CONTRACT = {"Standards", "Spec"}
-
-
-def listed_headings() -> set[str]:
-    spec = json.loads(SPEC.read_text(encoding="utf-8"))
-    return {h for entry in checker.load_spec(SPEC) for h in checker.declared_headings(entry)}
-
-
-def referenced_headings() -> set[str]:
-    found: set[str] = set()
-    for path in PLUGIN.rglob("*"):
-        if path.is_file() and path.suffix in {".md", ".sh", ".py"}:
-            found |= set(BACKTICKED_HEADING.findall(path.read_text(encoding="utf-8")))
-    return found - NOT_A_CONTRACT
-
-
-def test_every_listed_heading_is_read_by_a_skill() -> None:
-    """一覧にあるのにスキルが読まない見出しは、利用側に不要な縛りを課す。"""
-    assert listed_headings() - referenced_headings() == set()
-
-
-def test_every_heading_a_skill_reads_is_listed() -> None:
-    """スキルが読むのに一覧に無い見出しは、変えられても検出されない。"""
-    assert referenced_headings() - listed_headings() == set()
-
-
-README_ROW = re.compile(r"^\|\s*`(docs/agents/[^`]+)`\s*\|(.*)$")
-
-
-def readme_pairs() -> set[tuple[str, str]]:
-    """README の表（ファイル列と、契約する見出し列）から (ファイル, 見出し) の対を取る。"""
-    pairs: set[tuple[str, str]] = set()
-    for line in (REPO_ROOT / "README.md").read_text(encoding="utf-8").splitlines():
-        row = README_ROW.match(line)
-        if row:
-            pairs |= {(row.group(1), h) for h in BACKTICKED_HEADING.findall(row.group(2))}
-    return pairs
-
-
-def test_listed_pairs_match_the_readme_table_by_file_and_heading() -> None:
-    """集合同士の比較では、見出しを別ファイルのエントリへ移しても緑のまま、利用側に誤ったファイルを要求する。"""
-    listed = {(e["path"], h) for e in checker.load_spec(SPEC) for h in checker.declared_headings(e)}
-    assert listed == readme_pairs()
+# 一覧・README の表・スキル本文の見出し参照の突き合わせは scripts/ci/check_heading_references.py（CI のステップ）が持つ。
 
 
 @pytest.mark.parametrize("entry", json.loads(SPEC.read_text(encoding="utf-8"))["files"], ids=lambda e: e["path"])

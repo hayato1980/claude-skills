@@ -34,5 +34,7 @@ jobs:
             echo "公開リポに載せてはいけない語が含まれています" >&2
             exit 1
           fi
+      - name: Agent headings agree (list, README, skills)
+        run: python scripts/ci/check_heading_references.py --spec plugins/dev-workflow/agent-headings.json --readme README.md --plugin-root plugins/dev-workflow
       - name: Validate plugin
         run: npx --yes @anthropic-ai/claude-code plugin validate .
