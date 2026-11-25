@@ -252,7 +252,8 @@ ready 化 → CI 完了待ち → green ならマージ、を 1 本で行う（�
 | `CI red。マージしません。` | ゲート失敗 | 下の「CI が赤だったとき」へ |
 | `タイムアウトしました` | 判定不能 | まず `mergeable_state` を見る。`dirty` なら（待っている間に main が動いて衝突した）コンフリクトとして下の「CI が赤だったとき」へ。そうでなければ **1 回だけ**再実行する。2 回続いたら PR 本体に `[レビュー] CI 判定不能` と書き、`ready-for-human` を付けて人へ渡す |
 | マージ時に `Pull Request is not mergeable`（HTTP `405`） | マージコンフリクト | 下の「CI が赤だったとき」と同じ手順で修正側へ返す（スレッドには「コンフリクト」と書く） |
-| それ以外（API 失敗・`409` 等） | スクリプトが途中で止まった | 内容を PR 本体に `[レビュー]` で書き、`ready-for-human` を付けて人へ渡す |
+| マージ時に HTTP `409`（`Head branch was modified`） | 合意した後に head が変わった（修正側の push など） | **PR を取り直して head を確かめる。** 変わっていれば、増えたコミットは誰もレビューしていないので、**自分で draft に戻し**、増えた差分を読んでから本手順 7 をやり直す（人には渡さない）。head が変わっていない 409 は、下の「それ以外」と同じく人へ渡す |
+| それ以外（API 失敗等） | スクリプトが途中で止まった | 内容を PR 本体に `[レビュー]` で書き、`ready-for-human` を付けて人へ渡す |
 | ツール結果が `Permission for this action was denied by the Claude Code auto mode classifier` | **スクリプトは起動していない**（権限判定で拒否された。HTTP の 403 とは別物） | 単独呼び出しでなかったなら、単独にして **1 回だけ**やり直す。それでも拒否されたら、`update_pull_request` や merge API での迂回はしない（同じ操作を別の道具で行うことになる）。PR 本体に `[レビュー] マージ手順が権限判定で拒否された` と拒否文の `Reason:` を書き、`ready-for-human` を付けて人へ渡す。PR は draft のまま、購読とチェックインは落とす |
 
 **CI が赤だったとき（コンフリクトも同じ）:**
@@ -322,6 +323,8 @@ mcp__github__add_reply_to_pull_request_comment(owner, repo, pullNumber, commentI
 **CI が赤になった、またはコンフリクトが出たら、修正側が自分で判断して直す。** レビュー側のスレッドを待たない —— PR activity の CI 失敗通知・コンフリクト通知で起きたら、その場で取りかかる。レビュー側は push しないので、待っても誰も直さない。
 
 **前提:** CI は push では再実行されず、draft → ready の遷移でしか走り直さないのが普通（対象リポの `docs/agents/review-dialogue.md`「CI が走る条件」）。ready 化はレビュー側だけが行う。ただし**赤のまま ready に残っていたら、修正側が draft に戻してよい**（`update_pull_request(draft=true)`。ゲートを閉じる方向の操作なので）。CI 側の「失敗時に draft へ戻す」ジョブは、トークンの権限不足で戻せないことがある。
+
+**PR が ready（draft でない）の間は push しない。直すのは draft に戻ってから。** 修正側には、レビュー側がいまマージを試みているかが見えないので、見える状態（draft かどうか）で決める。ready の間に push すると head が変わり、レビュー側のマージが 409（`Head branch was modified`）で止まる。しかも取り込み後の head は CI を通っていない。ready のままコンフリクトに気づいたら、直さずに待つ。CI を待っている間に main が動いて衝突した場合は、マージ時の 405 でレビュー側が draft に戻してスレッドで返す（→ 7-2b の表）。上の「赤のまま ready に残っていたら draft に戻してよい」は、戻したあとなら push してよい、という意味でそのまま残る。
 
 **CI が赤のとき:**
 
