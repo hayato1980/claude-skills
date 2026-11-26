@@ -42,8 +42,8 @@ fi
 readonly REPO_ROOT
 
 # CI で止めるジョブ（空・見出し無しは blocking_jobs.sh が非ゼロで止める = fail-closed）。
-GATE_BLOCKING_JOBS="$(bash "$BLOCKING_JOBS_SCRIPT" "${REPO_ROOT}/docs/agents/pr-merge-gate.md" | tr '\n' ' ')"
-GATE_BLOCKING_JOBS="${GATE_BLOCKING_JOBS% }"
+# 1 行 1 ジョブの改行区切りのまま渡す（`test (3.13)` のように空白を含む名前があるため）。
+GATE_BLOCKING_JOBS="$(bash "$BLOCKING_JOBS_SCRIPT" "${REPO_ROOT}/docs/agents/pr-merge-gate.md")"
 export GATE_BLOCKING_JOBS
 
 readonly POLL_INTERVAL_SECONDS=30
@@ -303,14 +303,14 @@ else
   # この head SHA にブロッキングジョブの run が1件もないことを早期に検知して
   # 即座に終える（total_count だと無関係な check run の存在で素通りしてしまうため、
   # ジョブ名で絞る。この名前は judge_gate_checks.sh に渡す GATE_BLOCKING_JOBS と
-  # 同じ変数から取るので、集合がずれることはない）。
+  # 同じ変数から取り、空行・空白だけの行を捨てる規則も judge と揃えてある）。
   # PR が最初から非 draft で開かれた直後は、opened イベントの check run 登録が
   # 数秒〜数十秒遅れることがある。1回だけ猶予を置いて再確認し、
   # 「本当に CI が無い」と「まだ登録されていないだけ」を誤診しないようにする。
   for _attempt in 1 2; do
     precheck_body=$(_api_or_die GET "$CHECK_RUNS_URL" "check-runs 取得に失敗しました")
     precheck_count=$(printf '%s' "$precheck_body" | jq -r --arg jobs "$GATE_BLOCKING_JOBS" '
-      ($jobs | split(" ")) as $jobs
+      ($jobs | split("\n") | map(select(test("\\S")))) as $jobs
       | [.check_runs[] | select(.name as $n | $jobs | index($n))] | length
     ')
     if [ "$precheck_count" -gt 0 ]; then

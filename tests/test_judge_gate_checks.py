@@ -2,7 +2,7 @@
 
 ready_wait_merge.sh がポーリングで取った check-runs JSON をファイルで受け取り、
 「マージしてよいか」だけを終了コードで返す継ぎ目を検証する。
-ブロッキングジョブ名は環境変数 GATE_BLOCKING_JOBS（空白区切り）で受ける。
+ブロッキングジョブ名は環境変数 GATE_BLOCKING_JOBS（改行区切り。ジョブ名は空白を含みうる）で受ける。
 """
 
 from __future__ import annotations
@@ -62,18 +62,30 @@ class TestVerdict:
         assert run(str(write(tmp_path, runs))).returncode == OK
 
 
+class TestJobNamesWithSpaces:
+    def test_name_with_spaces_is_one_job(self, tmp_path: Path) -> None:
+        runs = [check_run("test (3.13)")]
+        assert run(str(write(tmp_path, runs)), jobs="test (3.13)").returncode == OK
+
+    def test_newline_separates_jobs(self, tmp_path: Path) -> None:
+        runs = [check_run("test (3.13)", rid=1), check_run("lint", conclusion="failure", rid=2)]
+        proc = run(str(write(tmp_path, runs)), jobs="test (3.13)\nlint")
+        assert proc.returncode == NG
+        assert "lint: failure" in proc.stdout
+
+
 class TestMultipleBlockingJobs:
     def test_all_must_succeed(self, tmp_path: Path) -> None:
         runs = [check_run("lint", rid=1), check_run("test", rid=2)]
-        assert run(str(write(tmp_path, runs)), jobs="lint test").returncode == OK
+        assert run(str(write(tmp_path, runs)), jobs="lint\ntest").returncode == OK
 
     def test_ng_wins_over_pending(self, tmp_path: Path) -> None:
         runs = [check_run("lint", conclusion="failure", rid=1), check_run("test", conclusion=None, status="queued", rid=2)]
-        assert run(str(write(tmp_path, runs)), jobs="lint test").returncode == NG
+        assert run(str(write(tmp_path, runs)), jobs="lint\ntest").returncode == NG
 
     def test_one_pending_one_ok_is_pending(self, tmp_path: Path) -> None:
         runs = [check_run("lint", rid=1), check_run("test", conclusion=None, status="queued", rid=2)]
-        assert run(str(write(tmp_path, runs)), jobs="lint test").returncode == PENDING
+        assert run(str(write(tmp_path, runs)), jobs="lint\ntest").returncode == PENDING
 
 
 class TestDuplicateRunsAndBaseline:
@@ -100,6 +112,12 @@ class TestDuplicateRunsAndBaseline:
 class TestUsage:
     def test_missing_blocking_jobs_is_usage_error(self, tmp_path: Path) -> None:
         proc = run(str(write(tmp_path, [check_run("gate")])), jobs=None)
+        assert proc.returncode == USAGE
+        assert "GATE_BLOCKING_JOBS" in proc.stderr
+
+    @pytest.mark.parametrize("jobs", ["", "\n\n", "  "], ids=["empty", "newlines-only", "spaces-only"])
+    def test_blank_blocking_jobs_is_usage_error(self, tmp_path: Path, jobs: str) -> None:
+        proc = run(str(write(tmp_path, [check_run("gate")])), jobs=jobs)
         assert proc.returncode == USAGE
         assert "GATE_BLOCKING_JOBS" in proc.stderr
 

@@ -33,6 +33,7 @@ class FakeGitHub:
     draft: bool = True
     comment_status: int = 201
     conclusion: str = "success"
+    job_name: str = "gate"
     requests: list[tuple[str, str, str]] = field(default_factory=list)
     _check_runs_calls: int = 0
 
@@ -59,7 +60,7 @@ class FakeGitHub:
             # draft の最初の 1 回は baseline 取得（run 無し）。以後は baseline より新しい成功 run を返す。
             if self.draft and self._check_runs_calls == 1:
                 return 200, {"check_runs": []}
-            run = {"id": 5, "name": "gate", "status": "completed", "conclusion": self.conclusion, "html_url": "u"}
+            run = {"id": 5, "name": self.job_name, "status": "completed", "conclusion": self.conclusion, "html_url": "u"}
             return 200, {"check_runs": [run]}
         if method == "POST" and path == "/graphql":
             return 200, {"data": {"markPullRequestReadyForReview": {"pullRequest": {"number": PR, "isDraft": False}}}}
@@ -318,6 +319,24 @@ class TestSkipLocalGate:
         assert fake.comments == []
         assert "省略するもの" in proc.stdout
         assert (fake.ready_calls, fake.merge_calls) == (1, 1)
+
+
+class TestJobNameWithSpaces:
+    """matrix ジョブの check-run 名（`test (3.13)`）のように空白を含む名前が、1 つのジョブとして扱われる。"""
+
+    JOB = "test (3.13)"
+
+    def test_already_ready_pr_with_spaced_job_name_is_merged(self, repo: Path, fake_github: tuple[FakeGitHub, str]) -> None:
+        fake, api = fake_github
+        fake.draft = False
+        fake.job_name = self.JOB
+        set_gate_doc(repo, f"## CI で止めるジョブ\n\n- `{self.JOB}`\n")
+        sync_fake_head_to_local(repo, fake)
+
+        proc = run_script(repo, api, str(PR))
+
+        assert proc.returncode == 0, proc.stderr
+        assert fake.merge_calls == 1
 
 
 class TestNoMerge:
