@@ -22,9 +22,11 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq jq shellcheck
-          python -m pip install pytest pyyaml
+          python -m pip install pytest pyyaml ruff
       - name: shellcheck
         run: shellcheck lib/*.sh plugins/dev-workflow/scripts/*.sh plugins/dev-workflow/hooks/*.sh plugins/dev-workflow/templates/*.sh .github/actions/*/*.sh
+      - name: ruff
+        run: ruff check .
       - name: pytest
         run: python -m pytest tests -q
       - name: No private names (public repository)
