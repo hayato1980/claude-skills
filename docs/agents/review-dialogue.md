@@ -24,7 +24,7 @@
 `.github/workflows/ci.yml` の `test` ジョブと同じものを手元で流す（Python 3.13、`jq`・`shellcheck`・`pytest` が要る）。
 
 ```bash
-shellcheck plugins/dev-workflow/scripts/*.sh plugins/dev-workflow/hooks/*.sh plugins/dev-workflow/templates/*.sh
+shellcheck lib/*.sh plugins/dev-workflow/scripts/*.sh plugins/dev-workflow/hooks/*.sh plugins/dev-workflow/templates/*.sh .github/actions/*/*.sh
 python -m pytest tests -q
 python scripts/ci/check_heading_references.py --spec plugins/dev-workflow/agent-headings.json --readme README.md --plugin-root plugins/dev-workflow
 npx --yes @anthropic-ai/claude-code plugin validate .

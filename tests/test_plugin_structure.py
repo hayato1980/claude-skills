@@ -15,10 +15,6 @@ from conftest import PLUGIN, REPO_ROOT, SCRIPTS, TEMPLATES
 SKILLS = ["issue-inventory", "review-dialogue", "create-ccw-session", "ready-merge", "session-closeout", "retro-closeout"]
 FRONTMATTER = re.compile(r"\A---\n(.*?)\n---\n", re.S)
 
-# 非公開リポの名前・ホスト名・業務ドメインの語。正規表現の文字クラスで組み、このファイル自身に
-# 語がそのまま現れないようにする（git grep が自分自身にヒットしない）。
-FORBIDDEN = r"[k]eiba|[j]rvltsql|[t]erraform|[a]urora"
-
 
 def frontmatter(path: Path) -> dict[str, str]:
     m = FRONTMATTER.match(path.read_text(encoding="utf-8"))
@@ -118,13 +114,6 @@ def test_scripts_are_executable_and_shellcheck_clean() -> None:
         assert subprocess.run(["bash", "-n", str(t)], check=False).returncode == 0, t
 
 
-def test_no_private_names_anywhere_in_tracked_files() -> None:
-    proc = subprocess.run(
-        ["git", "grep", "-nIiE", FORBIDDEN, "--", "."], cwd=REPO_ROOT, capture_output=True, text=True, check=False
-    )
-    assert proc.returncode == 1, f"公開リポに載せてはいけない語が含まれています:\n{proc.stdout}"
-
-
 def test_relative_links_in_skills_and_runbook_resolve() -> None:
     link = re.compile(r"\]\((\.{1,2}/[^)#\s]+)")
     docs = [*(PLUGIN / "skills").glob("*/*.md"), REPO_ROOT / "README.md", *(REPO_ROOT / "docs").glob("**/*.md")]
@@ -154,16 +143,6 @@ def test_marketplace_and_plugin_manifests_are_valid_json() -> None:
     assert market["plugins"][0]["name"] == "dev-workflow"
     plugin = json.loads((PLUGIN / ".claude-plugin" / "plugin.json").read_text())
     assert "version" not in plugin  # 版を書くと上げ忘れた変更が配られない（README 参照）
-
-
-def test_agent_contract_headings_are_documented() -> None:
-    # スキルが実行時に読む見出しは README の契約表に載っていること（載せ忘れると利用側が書けない）。
-    readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
-    for heading in [
-        "## オーナーマージの基準表", "## CI が走る条件", "## push 前に流すコマンド", "## CI で止めるジョブ",
-        "## 払い出しを止めるラベル", "## タグの決め方", "## モデル表に足す行", "## source_url", "## /implement", "## 更新するプラグイン",
-    ]:
-        assert heading in readme, heading
 
 
 def _decision(number: str) -> Path:

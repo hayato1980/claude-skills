@@ -57,6 +57,12 @@ class TestPrReviewDispatch:
         assert "resolve しない" in ctx
         assert "相手を引く" in ctx and "ポーク" in ctx and "自己チェックイン" in ctx and "購読" in ctx
 
+    def test_reminder_pulls_the_peer_by_issue_tag_excluding_self(self) -> None:
+        # #47: 相手は issue-<番号> タグで引き、自分を除く。revision は候補ごとの確認にだけ使う（create-ccw-session 手順 1）。
+        ctx = json.loads(run_dispatch("claude/issue-7").stdout)["hookSpecificOutput"]["additionalContext"]
+        assert "issue-7" in ctx and "自分自身を除" in ctx
+        assert "revision で確認し" not in ctx
+
     def test_head_is_read_from_tool_response_when_tool_input_has_none(self) -> None:
         resp = {"head": {"ref": "claude/issue-88"}}
         proc = run_dispatch(None, tool_response=resp)
