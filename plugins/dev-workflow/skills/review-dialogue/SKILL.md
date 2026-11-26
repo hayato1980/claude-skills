@@ -88,6 +88,7 @@ mcp__github__pull_request_review_write(method="submit_pending", event="COMMENT",
 全スレッドが resolved になったら、runbook の[「7. 合意 —— マージまで進める」](./runbook.md#7-合意--マージまで進める)を実行する。分岐の要点だけ書く（基準表・失敗時の扱いの正本は runbook）。
 
 - **マージ前に毎回、差分を見てオーナーマージ対象かを判定する。** 触ったファイルではなく、マージで本番の振る舞いや決定が変わるかで判定し、`docs/agents/review-dialogue.md` の基準表の行と差分の該当箇所を**名指しできるときだけ** `needs-owner-merge` を付ける（「迷ったら付ける」はしない。前例もたどらない）。外すことはしない（外せるのはオーナーだけ）。
+- **ready 化の前に毎回、PR 本文が最終の差分と一致しているかを見る**（`needs-owner-merge` の経路でも）。食い違いは指摘スレッドにして往復へ戻す（runbook 7）。
 - **表に無い中身の判断待ち**（issue がオーナー判断とした差分・受け入れ条件の未達など）はラベルにせず、draft のまま `[レビュー] オーナー判断待ち` と `ready-for-human` で人へ渡す（runbook 7-1）。
 - **`needs-owner-merge` 付き** → `scripts/ci/ready_wait_merge.sh --no-merge <PR番号>`（バックグラウンド・単独）で ready 化し、**CI の結果を見届けて**マージせずに止まる。赤なら draft に戻して往復へ（runbook 7-2a）。
 - **それ以外** → ready 化の前に `mergeable_state` を見て、`dirty` なら ready にせず下の CI 赤と同じく修正側へ返す。そうでなければ `scripts/ci/ready_wait_merge.sh <PR番号>` を**バックグラウンドで**、**先頭に `bash` を付けず、ほかのコマンドと `&&` でつながず単独で**起動し（許可ルールに一致させるため）、green ならマージまで。auto mode の権限判定で拒否されたら迂回せず、runbook 7-2b の表どおり人へ渡す。CI が赤、またはマージ時にコンフリクト（`405 not mergeable`）なら**自分で draft に戻し**、失敗を指摘スレッドとして投稿して往復に戻る。**原因の判断と修正は修正側の仕事**（→ runbook [修正側の手順 4](./runbook.md#4-ci-赤マージコンフリクトを自分で直す)）なので、レビュー側は直さない。
