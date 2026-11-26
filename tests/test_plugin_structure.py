@@ -189,3 +189,18 @@ def test_decision_0006_states_the_four_acceptance_points() -> None:
     decided = body.split("## 決めたこと")[1].split("\n## ")[0]
     assert "ツール自身に評価させ" in decided
 
+
+
+def test_runbook_self_checkin_says_to_write_next_time_in_status_detail() -> None:
+    """待つ側が次の起床時刻を外から読める形で残すこと（issue #29）。"""
+    runbook = (PLUGIN / "skills" / "review-dialogue" / "runbook.md").read_text(encoding="utf-8")
+    section = runbook.split("### 3. 自己チェックインを張り直す", 1)[1].split("### 4.", 1)[0]
+    assert "status_detail" in section
+    assert "UTC" in section and "ポーク済み" in section
+
+
+def test_parent_procedure_reads_idle_child_by_status_detail_time() -> None:
+    """親は IDLE の子を、status_detail の次の時刻が過ぎてから止まったと判断する（issue #29）。"""
+    skill = (PLUGIN / "skills" / "create-ccw-session" / "SKILL.md").read_text(encoding="utf-8")
+    assert "status_detail" in skill
+    assert "IDLE" in skill and "過ぎて" in skill
