@@ -419,8 +419,7 @@ PR をマージしても "Other" のまま変わらない。
 衝突する。同じ領域の issue を同時に払い出すと、2 つの子が同じファイルを別々に直して衝突しうる。同時払い出しは
 領域をばらす。
 
-**子が `IDLE` でも、止まっているとは限らない。** review-dialogue の往復では、待つ側は相手の応答を待って `IDLE`
-（`status_bucket` は `review_ready` / `working`）でターンを終える。`get_session` や `list_sessions` で `post_turn_summary` の
+**子が `IDLE` でも、止まっているとは限らない。** `get_session` や `list_sessions` で `post_turn_summary` の
 `status_detail` を読み、次のチェックインの UTC 時刻（書き方は [runbook](../review-dialogue/runbook.md)「ラウンドの閉じ方」手順 3）が
 **まだ過ぎていなければ、正常に待っている**ので、`send_message` で起こさない。**時刻が過ぎていたら、そこで初めて止まっていると
-判断する。** 時刻が書かれていない子は、見分けがつかないものとして runbook の手順 3 に従っていなかったと扱い、起こす前に PR のスレッドで相手の動きを確かめる。
+判断する。**
