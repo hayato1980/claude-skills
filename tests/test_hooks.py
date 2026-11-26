@@ -57,11 +57,18 @@ class TestPrReviewDispatch:
         assert "resolve しない" in ctx
         assert "相手を引く" in ctx and "ポーク" in ctx and "自己チェックイン" in ctx and "購読" in ctx
 
-    def test_reminder_pulls_the_peer_by_issue_tag_excluding_self(self) -> None:
-        # #47: 相手は issue-<番号> タグで引き、自分を除く。revision は候補ごとの確認にだけ使う（create-ccw-session 手順 1）。
+    def test_reminder_pulls_the_peer_by_issue_tag_and_branches_like_the_skill(self) -> None:
+        # #47: create-ccw-session 手順 1 と同じ意味。相手は issue-<番号> タグで引き自分を除く。
+        # 候補ごとに revision を読み、(a) claude/issue-<番号> そのもの → 払い出さない、
+        # (b) どれも別の値・未設定 → 払い出す、(c) 読めない行がある → 払い出さずに人へ渡す。
         ctx = json.loads(run_dispatch("claude/issue-7").stdout)["hookSpecificOutput"]["additionalContext"]
-        assert "issue-7" in ctx and "自分自身を除" in ctx
-        assert "revision で確認し" not in ctx
+        assert "tags に issue-7 を含み" in ctx
+        assert "自分自身を除" in ctx
+        assert "tags のフロー語では判定しない" in ctx
+        assert "候補が 0 行なら" in ctx
+        assert "claude/issue-7 そのものの行があれば" in ctx and "払い出さない" in ctx
+        assert "どれも別の値・未設定なら" in ctx and "払い出す" in ctx
+        assert "読めない行があれば" in ctx and "人へ渡す" in ctx
 
     def test_head_is_read_from_tool_response_when_tool_input_has_none(self) -> None:
         resp = {"head": {"ref": "claude/issue-88"}}
