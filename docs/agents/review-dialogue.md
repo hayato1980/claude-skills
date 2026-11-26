@@ -21,10 +21,11 @@
 
 ## push 前に流すコマンド
 
-`.github/workflows/ci.yml` の `test` ジョブと同じものを手元で流す（Python 3.13、`jq`・`shellcheck`・`pytest` が要る）。
+`.github/workflows/ci.yml` の `test` ジョブと同じものを手元で流す（Python 3.13、`jq`・`shellcheck`・`pytest`・`ruff`（`ci.yml` と同じ版。`pip install ruff==0.16.9`）が要る）。
 
 ```bash
 shellcheck lib/*.sh plugins/dev-workflow/scripts/*.sh plugins/dev-workflow/hooks/*.sh plugins/dev-workflow/templates/*.sh .github/actions/*/*.sh
+ruff check .
 python -m pytest tests -q
 python scripts/ci/check_heading_references.py --spec plugins/dev-workflow/agent-headings.json --readme README.md --plugin-root plugins/dev-workflow
 npx --yes @anthropic-ai/claude-code plugin validate .
