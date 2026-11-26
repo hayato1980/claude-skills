@@ -21,7 +21,7 @@
 
 ## push 前に流すコマンド
 
-`.github/workflows/ci.yml` の `test` ジョブと同じものを手元で流す（Python 3.13、`jq`・`shellcheck`・`pytest`・`ruff` が要る）。
+`.github/workflows/ci.yml` の `test` ジョブと同じものを手元で流す（Python 3.13、`jq`・`shellcheck`・`pytest`・`ruff`（`ci.yml` と同じ版。`pip install ruff==0.16.9`）が要る）。
 
 ```bash
 shellcheck lib/*.sh plugins/dev-workflow/scripts/*.sh plugins/dev-workflow/hooks/*.sh plugins/dev-workflow/templates/*.sh .github/actions/*/*.sh
