@@ -2,7 +2,7 @@
 
 ready_wait_merge.sh がポーリングで取った check-runs JSON をファイルで受け取り、
 「マージしてよいか」だけを終了コードで返す継ぎ目を検証する。
-ブロッキングジョブ名は環境変数 GATE_BLOCKING_JOBS（空白区切り）で受ける。
+ブロッキングジョブ名は環境変数 GATE_BLOCKING_JOBS（改行区切り。ジョブ名は空白を含みうる）で受ける。
 """
 
 from __future__ import annotations
@@ -112,6 +112,12 @@ class TestDuplicateRunsAndBaseline:
 class TestUsage:
     def test_missing_blocking_jobs_is_usage_error(self, tmp_path: Path) -> None:
         proc = run(str(write(tmp_path, [check_run("gate")])), jobs=None)
+        assert proc.returncode == USAGE
+        assert "GATE_BLOCKING_JOBS" in proc.stderr
+
+    @pytest.mark.parametrize("jobs", ["", "\n\n", "  "], ids=["empty", "newlines-only", "spaces-only"])
+    def test_blank_blocking_jobs_is_usage_error(self, tmp_path: Path, jobs: str) -> None:
+        proc = run(str(write(tmp_path, [check_run("gate")])), jobs=jobs)
         assert proc.returncode == USAGE
         assert "GATE_BLOCKING_JOBS" in proc.stderr
 
