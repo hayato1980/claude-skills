@@ -5,7 +5,7 @@
 # `GET /repos/{owner}/{repo}/commits/{ref}/check-runs`）をファイルで受け取り、
 # マージしてよいかだけを判定する。ネットワークには一切アクセスしない。
 #
-# ブロッキングジョブ名は環境変数 GATE_BLOCKING_JOBS（空白区切り）で受ける。各リポの
+# ブロッキングジョブ名は環境変数 GATE_BLOCKING_JOBS（改行区切り。ジョブ名は空白を含みうる）で受ける。各リポの
 # docs/agents/pr-merge-gate.md から ready_wait_merge.sh が読んで渡す（blocking_jobs.sh）。
 # すべてが conclusion=success なら OK。
 #
@@ -29,9 +29,9 @@ fi
 
 # 空のまま走ると「見るジョブが 0 個 = 常に OK」になり、CI を見ずにマージしうる。
 # fail-closed で用法エラーにする。
-read -r -a BLOCKING_JOBS <<<"${GATE_BLOCKING_JOBS:-}"
+mapfile -t BLOCKING_JOBS < <(printf '%s\n' "${GATE_BLOCKING_JOBS:-}" | sed '/^[[:space:]]*$/d')
 if [ "${#BLOCKING_JOBS[@]}" -eq 0 ]; then
-  echo "GATE_BLOCKING_JOBS が空です（CI で止めるジョブ名を空白区切りで指定してください）" >&2
+  echo "GATE_BLOCKING_JOBS が空です（CI で止めるジョブ名を改行区切りで指定してください）" >&2
   exit "$EXIT_USAGE"
 fi
 

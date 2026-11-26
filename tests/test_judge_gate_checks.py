@@ -62,18 +62,30 @@ class TestVerdict:
         assert run(str(write(tmp_path, runs))).returncode == OK
 
 
+class TestJobNamesWithSpaces:
+    def test_name_with_spaces_is_one_job(self, tmp_path: Path) -> None:
+        runs = [check_run("test (3.13)")]
+        assert run(str(write(tmp_path, runs)), jobs="test (3.13)").returncode == OK
+
+    def test_newline_separates_jobs(self, tmp_path: Path) -> None:
+        runs = [check_run("test (3.13)", rid=1), check_run("lint", conclusion="failure", rid=2)]
+        proc = run(str(write(tmp_path, runs)), jobs="test (3.13)\nlint")
+        assert proc.returncode == NG
+        assert "lint: failure" in proc.stdout
+
+
 class TestMultipleBlockingJobs:
     def test_all_must_succeed(self, tmp_path: Path) -> None:
         runs = [check_run("lint", rid=1), check_run("test", rid=2)]
-        assert run(str(write(tmp_path, runs)), jobs="lint test").returncode == OK
+        assert run(str(write(tmp_path, runs)), jobs="lint\ntest").returncode == OK
 
     def test_ng_wins_over_pending(self, tmp_path: Path) -> None:
         runs = [check_run("lint", conclusion="failure", rid=1), check_run("test", conclusion=None, status="queued", rid=2)]
-        assert run(str(write(tmp_path, runs)), jobs="lint test").returncode == NG
+        assert run(str(write(tmp_path, runs)), jobs="lint\ntest").returncode == NG
 
     def test_one_pending_one_ok_is_pending(self, tmp_path: Path) -> None:
         runs = [check_run("lint", rid=1), check_run("test", conclusion=None, status="queued", rid=2)]
-        assert run(str(write(tmp_path, runs)), jobs="lint test").returncode == PENDING
+        assert run(str(write(tmp_path, runs)), jobs="lint\ntest").returncode == PENDING
 
 
 class TestDuplicateRunsAndBaseline:
