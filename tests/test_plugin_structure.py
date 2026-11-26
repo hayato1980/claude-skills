@@ -189,3 +189,23 @@ def test_decision_0006_states_the_four_acceptance_points() -> None:
     decided = body.split("## 決めたこと")[1].split("\n## ")[0]
     assert "ツール自身に評価させ" in decided
 
+
+
+def runbook_section(heading: str) -> str:
+    """runbook の `### <heading>` 節の本文（次の見出しの手前まで）を返す。"""
+    text = RUNBOOK.read_text(encoding="utf-8")
+    m = re.search(rf"^### {re.escape(heading)}\n(.*?)(?=^#{{1,3}} )", text, re.S | re.M)
+    assert m, heading
+    return m.group(1)
+
+
+def test_runbook_fixer_updates_pr_body_when_a_push_changes_what_it_says() -> None:
+    # #28: 方針を変える修正を push したら、修正側が update_pull_request で PR 本文を差分に合わせる。
+    section = runbook_section("3. 指摘に応える")
+    assert "update_pull_request" in section and "本文" in section
+
+
+def test_runbook_reviewer_raises_body_diff_mismatch_as_a_thread_before_agreeing() -> None:
+    # #28: 合意判定で本文と差分の食い違いを見つけたら、PR 本体コメントでなく指摘スレッドにする。
+    section = runbook_section("7. 合意 —— マージまで進める")
+    assert "本文" in section and "差分" in section and "スレッド" in section

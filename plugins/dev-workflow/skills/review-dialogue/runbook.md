@@ -213,6 +213,8 @@ thread の node ID は `mcp__github__pull_request_read(method="get_review_commen
 
 **全スレッドが resolved になったら合意。** 合意したら、レビュー側が**マージまで**進める。**マージに進めるのはレビュー側だけ**で、修正側には持たせない（第三者性を保つため）。例外は**オーナーマージ対象**（`needs-owner-merge` ラベル）だけで、そちらは ready 化して CI を見届け、止める。
 
+**ready 化の前に、PR 本文が最終の差分と一致しているかを見る。** 食い違っていれば、**指摘スレッドとして投稿**し（PR 本体コメントにしない。[手順 2](#2-指摘を-1-件-1-スレッドで投稿する)）、直るまで resolve しない。直す責任は修正側（[修正側の手順 3](#3-指摘に応える)）。
+
 **ready 化の前に、コンフリクトが無いかを見る。** `pull_request_read(method="get")` の `mergeable_state` が `dirty` なら ready にせず、draft のまま下の「CI が赤だったとき」と同じ手順で修正側へ返す（スレッドには「コンフリクト」と書く）。GitHub はコンフリクトを抱えた PR では `pull_request` 系の workflow を起動しないので、そのまま ready にすると `ready_wait_merge.sh` は check run を待ってタイムアウトするだけになる。`mergeable_state` は計算が遅れて `unknown` を返すことがあるので、そのときは数十秒おいて 1 回だけ取り直し、それでも `unknown` なら先へ進む（タイムアウト行で拾う）。
 
 #### 7-1. オーナーマージ対象かを判定する
@@ -315,6 +317,8 @@ mcp__github__add_reply_to_pull_request_comment(owner, repo, pullNumber, commentI
 ```
 
 `commentId` は**数値の comment ID**（`#discussion_r...` アンカーの番号）。resolve に使う `PRRT_...` の node ID とは別物。
+
+**PR 本文に書いた内容が変わる修正（方針を変える・対象を広げる／狭める）を push したら、修正側が `mcp__github__update_pull_request(body=...)` で本文を差分に合わせる。** 本文が古いまま残ると、マージ後の履歴が最終の差分と食い違う。
 
 返信と push が済んだら、**閉じ忘れない**: [手順 5 ラウンドを閉じる](#5-ラウンドを閉じる)へ進む（相手を引く → ポーク → 自己チェックイン → 購読）。**修正側は resolve しない**（[手順 7](#7-やらないこと)）。
 
