@@ -23,7 +23,7 @@ readonly EXIT_PENDING=2
 readonly EXIT_USAGE=3
 
 if [ $# -lt 1 ] || [ $# -gt 2 ]; then
-  echo "usage: GATE_BLOCKING_JOBS=\"<job>\\n<job>...\" (1 行 1 ジョブの改行区切り) $0 <check-runs.json> [baseline_id]" >&2
+  echo "usage: GATE_BLOCKING_JOBS=\"<job> を 1 行ずつ改行で区切った文字列\" $0 <check-runs.json> [baseline_id]" >&2
   exit "$EXIT_USAGE"
 fi
 
