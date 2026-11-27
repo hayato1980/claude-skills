@@ -28,8 +28,14 @@ def test_fails_loudly_when_ruff_is_available_in_neither_form(
     empty_bin = tmp_path / "empty-bin"
     empty_bin.mkdir()
 
-    with pytest.raises(RuffNotFoundError, match="ruff が見つからない"):
-        run_ruff(cwd=tmp_path, python=str(python_without_ruff), path=str(empty_bin))
+    with pytest.raises(RuffNotFoundError, match="ruff が見つからない") as excinfo:
+        run_ruff(cwd=tmp_path, python=str(python_without_ruff), search_path=str(empty_bin))
+
+    # 切り分けのため、試したものと probe の stderr を文言に載せる
+    message = str(excinfo.value)
+    assert f"{python_without_ruff} -m ruff" in message
+    assert "PATH の ruff" in message
+    assert "No module named ruff" in message
 
 
 def test_uses_the_ruff_executable_on_path_when_the_module_is_missing(
@@ -39,7 +45,7 @@ def test_uses_the_ruff_executable_on_path_when_the_module_is_missing(
     bin_dir.mkdir()
     _script(bin_dir / "ruff", 'echo "executable ran: $*"; exit 0')
 
-    result = run_ruff(cwd=tmp_path, python=str(python_without_ruff), path=str(bin_dir))
+    result = run_ruff(cwd=tmp_path, python=str(python_without_ruff), search_path=str(bin_dir))
 
     assert result.returncode == 0
     assert "executable ran: check ." in result.stdout
@@ -54,7 +60,20 @@ def test_reports_violations_through_the_module_form(tmp_path: Path) -> None:
     empty_bin = tmp_path / "empty-bin"
     empty_bin.mkdir()
 
-    result = run_ruff(cwd=tmp_path, python=str(python_with_ruff), path=str(empty_bin))
+    result = run_ruff(cwd=tmp_path, python=str(python_with_ruff), search_path=str(empty_bin))
+
+    assert result.returncode == 1
+    assert "F401 unused import" in result.stdout
+
+
+def test_reports_violations_through_the_executable_form(
+    tmp_path: Path, python_without_ruff: Path
+) -> None:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _script(bin_dir / "ruff", 'echo "F401 unused import"; exit 1')
+
+    result = run_ruff(cwd=tmp_path, python=str(python_without_ruff), search_path=str(bin_dir))
 
     assert result.returncode == 1
     assert "F401 unused import" in result.stdout
