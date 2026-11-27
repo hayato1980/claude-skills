@@ -1,6 +1,7 @@
-"""プラグインの hook 2 本と hooks.json の検証。
+"""プラグインの hook 3 本と hooks.json の検証。
 
 - pr-review-dispatch.sh: 作成した PR の head が claude/issue-<N> のときだけ、PR 作成直後にレビュー払い出しを促す。
+- tdd-seam-policy.sh: claude/issue-<N> で mattpocock-skills:tdd を発動したときだけ、シームを記録して進む手順へ導く。
 - deny-mattpocock-implement.sh: 対象リポの docs/agents/dev-workflow.md で有効にしたときだけ /implement を止める。
 """
 
@@ -184,11 +185,99 @@ class TestHooksJson:
     def test_registers_both_hooks_via_plugin_root(self) -> None:
         cfg = json.loads((HOOKS / "hooks.json").read_text())["hooks"]
         submit = cfg["UserPromptSubmit"][0]["hooks"][0]["command"]
-        post = cfg["PostToolUse"][0]
+        post = {entry["matcher"]: entry["hooks"][0]["command"] for entry in cfg["PostToolUse"]}
         assert submit == "${CLAUDE_PLUGIN_ROOT}/hooks/deny-mattpocock-implement.sh"
-        assert post["matcher"] == "mcp__github__create_pull_request"
-        assert post["hooks"][0]["command"] == "${CLAUDE_PLUGIN_ROOT}/hooks/pr-review-dispatch.sh"
+        assert post == {
+            "mcp__github__create_pull_request": "${CLAUDE_PLUGIN_ROOT}/hooks/pr-review-dispatch.sh",
+            "Skill": "${CLAUDE_PLUGIN_ROOT}/hooks/tdd-seam-policy.sh",
+        }
 
     def test_registered_scripts_exist_and_are_executable(self) -> None:
-        for name in ("deny-mattpocock-implement.sh", "pr-review-dispatch.sh"):
+        for name in ("deny-mattpocock-implement.sh", "pr-review-dispatch.sh", "tdd-seam-policy.sh"):
             assert os.access(HOOKS / name, os.X_OK), name
+
+
+SEAM_HOOK = HOOKS / "tdd-seam-policy.sh"
+
+
+def make_repo(path: Path, branch: str) -> Path:
+    path.mkdir(parents=True, exist_ok=True)
+    subprocess.run(["git", "init", "-q", "-b", branch, str(path)], check=True)
+    return path
+
+
+def run_seam(skill: str | None, *, cwd: Path | None, env_extra: dict[str, str] | None = None,
+             stdin_override: str | None = None) -> subprocess.CompletedProcess[str]:
+    payload: dict[str, object] = {"hook_event_name": "PostToolUse", "tool_name": "Skill",
+                                  "tool_input": {} if skill is None else {"skill": skill, "args": "#5"}}
+    if cwd is not None:
+        payload["cwd"] = str(cwd)
+    env = {k: v for k, v in os.environ.items() if k != "CLAUDE_PROJECT_DIR"}
+    env.update(env_extra or {})
+    return subprocess.run(["bash", str(SEAM_HOOK)], input=stdin_override if stdin_override is not None else json.dumps(payload),
+                          capture_output=True, text=True, check=False, env=env)
+
+
+class TestTddSeamPolicy:
+    """判断 0009: 対象ブランチで tdd を発動したときだけ、シームを記録して進む手順へ導く。"""
+
+    def test_tdd_on_issue_branch_gets_the_seam_policy(self, tmp_path: Path) -> None:
+        proc = run_seam("mattpocock-skills:tdd", cwd=make_repo(tmp_path / "r", "claude/issue-54"))
+        assert proc.returncode == 0
+        out = json.loads(proc.stdout)["hookSpecificOutput"]
+        assert out["hookEventName"] == "PostToolUse"
+        ctx = out["additionalContext"]
+        assert "AskUserQuestion を出さない" in ctx and "返事を待たない" in ctx
+        assert "issue #54" in ctx and "## シーム" in ctx
+        assert "払い出された tdd のシーム" in ctx
+
+    def test_paths_in_the_policy_point_at_real_plugin_files(self, tmp_path: Path) -> None:
+        # 修正側が読む先（SKILL.md の節・standards.md）は、プラグインの実ファイルの絶対パスで渡す。
+        root = HOOKS.parent
+        proc = run_seam("mattpocock-skills:tdd", cwd=make_repo(tmp_path / "r", "claude/issue-1"),
+                        env_extra={"CLAUDE_PLUGIN_ROOT": str(root)})
+        ctx = json.loads(proc.stdout)["hookSpecificOutput"]["additionalContext"]
+        for rel in ("skills/create-ccw-session/SKILL.md", "skills/review-dialogue/standards.md"):
+            path = root / rel
+            assert str(path) in ctx
+            assert path.is_file()
+
+    def test_leading_slash_in_skill_name_is_accepted(self, tmp_path: Path) -> None:
+        proc = run_seam("/mattpocock-skills:tdd", cwd=make_repo(tmp_path / "r", "claude/issue-3"))
+        assert "issue #3" in json.loads(proc.stdout)["hookSpecificOutput"]["additionalContext"]
+
+    @pytest.mark.parametrize("skill", ["mattpocock-skills:diagnosing-bugs", "tdd", "other:tdd", None])
+    def test_other_skills_get_nothing(self, tmp_path: Path, skill: str | None) -> None:
+        proc = run_seam(skill, cwd=make_repo(tmp_path / "r", "claude/issue-3"))
+        assert proc.returncode == 0 and proc.stdout == ""
+
+    @pytest.mark.parametrize("branch", ["main", "claude/brave-otter-x1y2z3", "claude/issue-3-retry"])
+    def test_direct_work_branches_get_nothing(self, tmp_path: Path, branch: str) -> None:
+        # 直接作業ではオーナーが会話にいるので、上流 tdd のとおり合意する。
+        proc = run_seam("mattpocock-skills:tdd", cwd=make_repo(tmp_path / "r", branch))
+        assert proc.returncode == 0 and proc.stdout == ""
+
+    def test_branch_falls_back_to_project_dir_without_cwd(self, tmp_path: Path) -> None:
+        repo = make_repo(tmp_path / "r", "claude/issue-9")
+        proc = run_seam("mattpocock-skills:tdd", cwd=None, env_extra={"CLAUDE_PROJECT_DIR": str(repo)})
+        assert "issue #9" in json.loads(proc.stdout)["hookSpecificOutput"]["additionalContext"]
+
+    def test_outside_a_git_repo_gets_nothing(self, tmp_path: Path) -> None:
+        proc = run_seam("mattpocock-skills:tdd", cwd=tmp_path)
+        assert proc.returncode == 0 and proc.stdout == ""
+
+    @pytest.mark.parametrize("stdin_override", ["", "{not json"])
+    def test_unreadable_input_is_fail_soft(self, tmp_path: Path, stdin_override: str) -> None:
+        proc = run_seam(None, cwd=tmp_path, stdin_override=stdin_override)
+        assert proc.returncode == 0 and proc.stdout == ""
+
+    def test_missing_jq_is_loud_not_silent(self, tmp_path: Path) -> None:
+        bindir = tmp_path / "bin"
+        bindir.mkdir()
+        for tool in ("bash", "cat", "git"):
+            found = shutil.which(tool)
+            assert found
+            (bindir / tool).symlink_to(found)
+        proc = run_seam("mattpocock-skills:tdd", cwd=tmp_path, env_extra={"PATH": str(bindir)})
+        assert proc.returncode == 1
+        assert "jq" in proc.stderr
