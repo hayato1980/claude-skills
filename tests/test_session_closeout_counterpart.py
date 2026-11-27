@@ -156,3 +156,28 @@ def test_one_trailing_archived_page_is_not_enough_to_stop(tmp_path: Path, capsys
     rc, _, err = _run(["--want", "reviewer", "--issue", "49", str(live), str(old1)], capsys)
     assert rc == EXIT_INCOMPLETE
     assert 'after_id="b"' in err
+
+
+def test_repo_defaults_to_git_remote_origin_like_the_closeout_call(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import subprocess
+
+    repo = tmp_path / "work"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    subprocess.run(["git", "-C", str(repo), "remote", "add", "origin", f"{REPO_URL}.git"], check=True)
+    monkeypatch.setenv("SESSION_CLOSEOUT_REPO_ROOT", str(repo))
+    page = _page(tmp_path, "p1", [_row("session_rev", ["issue-49"])])
+    detail = _detail(tmp_path, "session_rev", ISSUE_BRANCH)
+    assert main(["counterpart", "--want", "reviewer", "--issue", "49", str(page), f"--session={detail}"]) == 0
+    assert capsys.readouterr().out.strip() == "found session_rev"
+
+
+def test_self_id_defaults_to_the_environment_variable_with_its_prefix_swapped(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("CLAUDE_CODE_REMOTE_SESSION_ID", "cse_me")
+    rows = [_row("session_me", ["issue-49"]), _row("session_rev", ["issue-49"])]
+    rc, out, _ = _ask(tmp_path, capsys, rows, {"session_rev": ISSUE_BRANCH}, "--want", "reviewer", "--issue", "49")
+    assert (rc, out.strip()) == (0, "found session_rev")

@@ -12,7 +12,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import subprocess
 import sys
 import urllib.parse
 import urllib.request
@@ -21,7 +20,8 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
-from .bundles import Grouping, bucket_short, fill_session_context, group, is_truncated, load_details, issue_branch, load_pages, next_after_id, repo_from_remote_url
+from .environment import default_repo as _default_repo, default_self_id as _default_self_id
+from .bundles import Grouping, bucket_short, fill_session_context, group, is_truncated, load_details, issue_branch, load_pages, next_after_id
 from .judge import IssueState, PullRequest, Verdict, judge, judge_pr
 
 _GH_API = "https://api.github.com"
@@ -31,23 +31,6 @@ STOP_AFTER_ARCHIVED_PAGES = 2  # アーカイブ済みだけのページがこ�
 
 Fetch = Callable[[int], IssueState]
 FetchPr = Callable[[int], PullRequest]
-
-
-def _default_self_id() -> str | None:
-    # CCR の環境変数は cse_<id>、list_sessions の id は session_<id>（接尾辞が同じ）。
-    raw = os.environ.get("CLAUDE_CODE_REMOTE_SESSION_ID")
-    return "session_" + raw.removeprefix("cse_") if raw else None
-
-
-def _default_repo() -> str:
-    # 中継が SESSION_CLOSEOUT_REPO_ROOT で対象リポを渡す（cwd は変えない: 結果ファイルの相対パスを保つため）。
-    root = os.environ.get("SESSION_CLOSEOUT_REPO_ROOT")
-    cmd = ["git", *(["-C", root] if root else []), "remote", "get-url", "origin"]
-    try:
-        url = subprocess.run(cmd, capture_output=True, text=True, check=True).stdout.strip()
-    except (OSError, subprocess.CalledProcessError) as e:
-        raise ValueError(f"git remote origin を読めない（--repo owner/repo で渡す）: {e}") from e
-    return repo_from_remote_url(url)
 
 
 def _gh_get(path: str, token: str) -> Any:

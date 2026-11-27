@@ -12,19 +12,13 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 
+from .environment import default_repo, default_self_id
 from .bundles import (Page, fill_session_context, group, is_truncated, issue_branch, load_details, load_pages,
                       next_after_id)
 
 EXIT_INCOMPLETE = 2
 EXIT_NEEDS_CONTEXT = 3
 STOP_AFTER_ARCHIVED_PAGES = 2
-
-
-def _default_self_id() -> str | None:
-    import os
-
-    raw = os.environ.get("CLAUDE_CODE_REMOTE_SESSION_ID")
-    return "session_" + raw.removeprefix("cse_") if raw else None
 
 
 def _forget_context(pages: list[Page]) -> list[Page]:
@@ -40,12 +34,17 @@ def run(argv: list[str]) -> int:
     target.add_argument("--issue", type=int, help="issue 番号（対象ブランチは claude/issue-<番号>）")
     target.add_argument("--pr", type=int, help="issue を持たない PR の番号（--head が要る）")
     ap.add_argument("--head", help="--pr のときの PR の head ブランチ（対象ブランチ）")
-    ap.add_argument("--self-id", default=_default_self_id())
-    ap.add_argument("--repo", required=True, help="owner/repo")
+    ap.add_argument("--self-id", default=default_self_id())
+    ap.add_argument("--repo", help="owner/repo（既定は git remote origin）")
     ap.add_argument("--session", action="append", type=Path, default=[], help="get_session の結果ファイル")
     args = ap.parse_args(argv)
     if args.pr is not None and not args.head:
         print("--pr には --head（PR の head ブランチ）が要る", file=sys.stderr)
+        return 1
+    try:
+        repo = args.repo or default_repo()
+    except ValueError as e:
+        print(e, file=sys.stderr)
         return 1
     branch = issue_branch(args.issue) if args.issue is not None else args.head
 
@@ -62,7 +61,7 @@ def run(argv: list[str]) -> int:
         print(f"結果ファイルを読めない: {e}", file=sys.stderr)
         return 1
 
-    grouping = group(pages, args.self_id, {args.issue} if args.issue is not None else None, args.repo,
+    grouping = group(pages, args.self_id, {args.issue} if args.issue is not None else None, repo,
                      prs={args.pr} if args.pr is not None else None)
     if grouping.needs_context:
         ids = " ".join(s.id for s in grouping.needs_context)
