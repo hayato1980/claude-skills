@@ -2,18 +2,10 @@
 
 from __future__ import annotations
 
-import subprocess
-import sys
-
 from conftest import REPO_ROOT
+from ruff_runner import run_ruff
 
 
 def test_ruff_passes_on_the_whole_repository() -> None:
-    result = subprocess.run(
-        [sys.executable, "-m", "ruff", "check", "."],
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    result = run_ruff(cwd=REPO_ROOT)
     assert result.returncode == 0, result.stdout + result.stderr
