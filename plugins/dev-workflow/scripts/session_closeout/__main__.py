@@ -21,13 +21,11 @@ from pathlib import Path
 from typing import Any
 
 from .environment import default_repo as _default_repo, default_self_id as _default_self_id
-from .bundles import Grouping, bucket_short, fill_session_context, group, is_truncated, load_details, issue_branch, load_pages, next_after_id
+from .bundles import (EXIT_INCOMPLETE, EXIT_NEEDS_CONTEXT, STOP_AFTER_ARCHIVED_PAGES, Grouping, ListingIncomplete,
+                      bucket_short, group, issue_branch, needs_context_message, read_listing)
 from .judge import IssueState, PullRequest, Verdict, judge, judge_pr
 
 _GH_API = "https://api.github.com"
-EXIT_INCOMPLETE = 2
-EXIT_NEEDS_CONTEXT = 3
-STOP_AFTER_ARCHIVED_PAGES = 2  # アーカイブ済みだけのページがこの枚数続いたら打ち切る（SKILL.md と一致させる）
 
 Fetch = Callable[[int], IssueState]
 FetchPr = Callable[[int], PullRequest]
@@ -161,19 +159,10 @@ def main(argv: list[str] | None = None, fetch: Fetch | None = None, fetch_pr: Fe
         return 1
 
     try:
-        pages = load_pages(args.pages)
-        after_id = next_after_id(pages)  # 順序の誤りはここで検出する
-        truncated = is_truncated(pages, STOP_AFTER_ARCHIVED_PAGES)
-    except (OSError, ValueError) as e:
-        print(f"結果ファイルを読めない: {e}", file=sys.stderr)
-        return 1
-    if after_id is not None and not truncated:
-        print(f'ページが足りない: list_sessions(mine=true, limit=100, after_id="{after_id}") の結果を末尾に足す',
-              file=sys.stderr)
+        pages, truncated = read_listing(args.pages, args.session)
+    except ListingIncomplete as e:
+        print(e, file=sys.stderr)
         return EXIT_INCOMPLETE
-
-    try:
-        pages = fill_session_context(pages, load_details(args.session))
     except (OSError, ValueError) as e:
         print(f"結果ファイルを読めない: {e}", file=sys.stderr)
         return 1
@@ -181,9 +170,7 @@ def main(argv: list[str] | None = None, fetch: Fetch | None = None, fetch_pr: Fe
                      truncated_after=STOP_AFTER_ARCHIVED_PAGES if truncated else None,
                      prs=set(args.pr) if args.pr else None)
     if grouping.needs_context:
-        ids = " ".join(s.id for s in grouping.needs_context)
-        print("list_sessions の行に session_context が無い。次の id を get_session で引き、"
-              f"保存された結果を --session で 1 つずつ足す: {ids}", file=sys.stderr)
+        print(needs_context_message(grouping.needs_context), file=sys.stderr)
         return EXIT_NEEDS_CONTEXT
     states: dict[int, IssueState] = {}
     verdicts: dict[int, Verdict] = {}

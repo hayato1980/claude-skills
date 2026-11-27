@@ -19,6 +19,11 @@ BUCKET_FAILED = _BUCKET_PREFIX + "FAILED"
 KNOWN_BUCKETS = frozenset({BUCKET_WORKING, BUCKET_BLOCKED, BUCKET_FAILED, _BUCKET_PREFIX + "REVIEW_READY", _BUCKET_PREFIX + "COMPLETED"})
 
 
+EXIT_INCOMPLETE = 2
+EXIT_NEEDS_CONTEXT = 3
+STOP_AFTER_ARCHIVED_PAGES = 2  # アーカイブ済みだけのページがこの枚数続いたら打ち切る（SKILL.md と一致させる）
+
+
 def repo_from_remote_url(url: str) -> str:
     """`git remote get-url` の値から `owner/repo` を取る（https / ssh / プロキシ経由の形に対応）。"""
     parts = [p for p in re.split(r"[/:]", url.strip().removesuffix(".git")) if p]
@@ -268,3 +273,28 @@ def group(pages: list[Page], self_id: str | None, issues: set[int] | None, repo:
                 pr_bundles.setdefault(n, []).append(s)
     return Grouping(bundles=dict(sorted(bundles.items())), pr_bundles=dict(sorted(pr_bundles.items())), excluded=excluded, archived=archived, needs_context=needs_context,
                     truncated_after=truncated_after)
+
+
+class ListingIncomplete(Exception):
+    """続きのページが要る。メッセージは次に引く `after_id` を含み、そのまま stderr に出す。"""
+
+
+def read_listing(page_paths: list[Path], session_paths: list[Path], *, confirm_all: bool = False) -> tuple[list[Page], bool]:
+    """結果ファイルを読み、ページの不足を検出し、`get_session` の結果で `session_context` を補う。
+
+    `confirm_all` のときは、行に載っている `session_context` を信じず、`get_session` の結果がある行だけ確かめ済みとする。
+    戻り値は (ページ, 打ち切ったか)。不足は ListingIncomplete、読めない入力は ValueError / OSError。
+    """
+    pages = load_pages(page_paths)
+    after_id = next_after_id(pages)  # 順序の誤りはここで検出する
+    truncated = is_truncated(pages, STOP_AFTER_ARCHIVED_PAGES)
+    if after_id is not None and not truncated:
+        raise ListingIncomplete(f'ページが足りない: list_sessions(mine=true, limit=100, after_id="{after_id}") の結果を末尾に足す')
+    if confirm_all:
+        pages = [replace(p, sessions=[replace(s, context_known=False) for s in p.sessions]) for p in pages]
+    return fill_session_context(pages, load_details(session_paths)), truncated
+
+
+def needs_context_message(sessions: list[Session]) -> str:
+    ids = " ".join(s.id for s in sessions)
+    return f"list_sessions の行に session_context が無い。次の id を get_session で引き、保存された結果を --session で 1 つずつ足す: {ids}"

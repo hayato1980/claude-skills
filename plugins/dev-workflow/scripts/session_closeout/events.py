@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-_KEY = "internal_anthropic_catchall"
+_CATCHALL_KEY = "internal_anthropic_catchall"
 
 
 def _payload(text: str) -> Any:
@@ -30,12 +30,12 @@ def render(text: str) -> list[str]:
         raise ValueError("list_events の結果として読めない: ccr.data が無い")
     lines: list[str] = []
     for ev in body["data"]:
-        message = ((ev.get("assistant") or {}).get(_KEY) or {}).get("message") or {}
+        message = ((ev.get("assistant") or {}).get(_CATCHALL_KEY) or {}).get("message") or {}
         content = message.get("content")
         for part in content if isinstance(content, list) else []:
             if part.get("type") == "text":
                 lines.append(part["text"])
-        result = (ev.get("result") or {}).get(_KEY)
+        result = (ev.get("result") or {}).get(_CATCHALL_KEY)
         if result:
             lines.append(f"[result {result.get('subtype')} is_error={str(result.get('is_error')).lower()}] {result.get('result')}")
     return lines

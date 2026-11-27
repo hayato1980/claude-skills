@@ -12,16 +12,24 @@ from conftest import SCRIPTS
 sys.path.insert(0, str(SCRIPTS))
 
 import json
+import subprocess
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from session_closeout.__main__ import EXIT_INCOMPLETE, EXIT_NEEDS_CONTEXT, main
+from session_closeout.__main__ import main
+from session_closeout.bundles import EXIT_INCOMPLETE, EXIT_NEEDS_CONTEXT
 
 REPO = "acme/widgets"
 REPO_URL = "https://github.com/acme/widgets"
 ISSUE_BRANCH = "claude/issue-49"
+
+
+@pytest.fixture(autouse=True)
+def _own_session(monkeypatch: pytest.MonkeyPatch) -> None:
+    # 自分の session id は呼び出し環境から読む。テストごとに環境へ依存させない。
+    monkeypatch.setenv("CLAUDE_CODE_REMOTE_SESSION_ID", "cse_unrelated")
 
 
 def _row(sid: str, tags: list[str], *, archived: bool = False) -> dict[str, Any]:
@@ -43,6 +51,14 @@ def _detail(tmp_path: Path, sid: str, revision: str | None, url: str = REPO_URL)
     p = tmp_path / f"detail-{sid}.json"
     p.write_text(json.dumps({"ccr": {"id": sid, "session_context": {"sources": [{"git_repository": repo}]}}}), encoding="utf-8")
     return p
+
+
+def _ask(tmp_path: Path, capsys: pytest.CaptureFixture[str], rows: list[dict[str, Any]], revisions: dict[str, str | None],
+         *argv: str, self_id: str | None = None) -> tuple[int, str, str]:
+    page = _page(tmp_path, "p1", rows)
+    details = [f"--session={_detail(tmp_path, sid, rev)}" for sid, rev in revisions.items()]
+    extra = ["--self-id", self_id] if self_id else []
+    return _run([*argv, *extra, str(page), *details], capsys)
 
 
 def _run(argv: list[str], capsys: pytest.CaptureFixture[str]) -> tuple[int, str, str]:
@@ -73,14 +89,6 @@ def test_wants_reviewer_finds_the_session_on_the_issue_branch(tmp_path: Path, ca
     details = [_detail(tmp_path, "session_fix", None), _detail(tmp_path, "session_rev", ISSUE_BRANCH)]
     rc, out, _ = _run(["--want", "reviewer", "--issue", "49", str(page), *(f"--session={d}" for d in details)], capsys)
     assert (rc, out.strip()) == (0, "found session_rev")
-
-
-def _ask(tmp_path: Path, capsys: pytest.CaptureFixture[str], rows: list[dict[str, Any]], revisions: dict[str, str | None],
-         *argv: str, self_id: str | None = None) -> tuple[int, str, str]:
-    page = _page(tmp_path, "p1", rows)
-    details = [f"--session={_detail(tmp_path, sid, rev)}" for sid, rev in revisions.items()]
-    extra = ["--self-id", self_id] if self_id else []
-    return _run([*argv, *extra, str(page), *details], capsys)
 
 
 def test_wants_fixer_finds_the_session_not_on_the_issue_branch(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -161,8 +169,6 @@ def test_one_trailing_archived_page_is_not_enough_to_stop(tmp_path: Path, capsys
 def test_repo_defaults_to_git_remote_origin_like_the_closeout_call(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import subprocess
-
     repo = tmp_path / "work"
     repo.mkdir()
     subprocess.run(["git", "init", "-q", str(repo)], check=True)
@@ -180,4 +186,22 @@ def test_self_id_defaults_to_the_environment_variable_with_its_prefix_swapped(
     monkeypatch.setenv("CLAUDE_CODE_REMOTE_SESSION_ID", "cse_me")
     rows = [_row("session_me", ["issue-49"]), _row("session_rev", ["issue-49"])]
     rc, out, _ = _ask(tmp_path, capsys, rows, {"session_rev": ISSUE_BRANCH}, "--want", "reviewer", "--issue", "49")
+    assert (rc, out.strip()) == (0, "found session_rev")
+
+
+def test_without_a_known_own_session_id_it_stops_instead_of_silently_not_excluding_itself(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("CLAUDE_CODE_REMOTE_SESSION_ID")
+    rc, out, err = _ask(tmp_path, capsys, [], {}, "--want", "reviewer", "--issue", "49")
+    assert (rc, out) == (1, "")
+    assert "--self-id" in err
+
+
+def test_head_overrides_the_issue_branch_for_a_pr_whose_head_is_not_the_issue_branch(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    rows = [_row("session_fix", ["issue-49"]), _row("session_rev", ["issue-49"])]
+    revisions = {"session_fix": "main", "session_rev": "owner/direct-branch"}
+    rc, out, _ = _ask(tmp_path, capsys, rows, revisions, "--want", "reviewer", "--issue", "49", "--head", "owner/direct-branch")
     assert (rc, out.strip()) == (0, "found session_rev")

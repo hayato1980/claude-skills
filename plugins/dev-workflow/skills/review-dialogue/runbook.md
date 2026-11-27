@@ -60,7 +60,7 @@
    scripts/ci/session_closeout.sh counterpart --want <reviewer|fixer> --issue <番号> <list_sessions の保存ファイル（取得順）>... [--session <get_session の保存ファイル>]...
    ```
 
-   issue を持たない PR は `--issue` の代わりに `--pr <PR番号> --head <PR の head ブランチ>`。自分の除外は、スクリプトが環境変数 `CLAUDE_CODE_REMOTE_SESSION_ID` から行う（接頭辞の違い `cse_` / `session_` も吸収する）。`bash` を前置せず単独で呼ぶ（許可ルールが固定パスを指すため）。
+   対象ブランチは既定で `claude/issue-<番号>`。PR の head がそれと違うとき（オーナーの直接セッションが作った PR など）は `--head <PR の head ブランチ>` を足す。issue を持たない PR は `--issue` の代わりに `--pr <PR番号> --head <PR の head ブランチ>`。自分の除外は、スクリプトが環境変数 `CLAUDE_CODE_REMOTE_SESSION_ID` から行う（接頭辞の違い `cse_` / `session_` も吸収する）。`bash` を前置せず単独で呼ぶ（許可ルールが固定パスを指すため）。
 
 3. 終了コードで次を決める。
    - **2** → ページが足りない。stderr の `after_id` で `list_sessions(mine=true, limit=100, after_id=…)` を引き、保存ファイルを**末尾に足して**呼び直す。アーカイブ済みだけのページが 2 枚続けば、スクリプトがそこで打ち切る（実測 → #31）。
