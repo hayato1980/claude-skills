@@ -13,7 +13,8 @@
 #   - 現在のブランチが `claude/issue-<N>`（対象ブランチ）のときだけ。prompt では判定しない（#35）。
 #     ブランチは入力の `cwd`（無ければ CLAUDE_PROJECT_DIR、さらに無ければ $PWD）で git に聞く。
 #     直接作業のセッションはブランチ名が乱数なので反応しない（上流どおりオーナーと合意する）。
-# 手順の本文は SKILL.md の 1 か所にだけあり、ここには要点と読む先だけを書く。
+# 手順の本文は SKILL.md の 1 か所にだけあり（判断 0009）、ここには写さない。差し込むのは、上流の合意手順を
+# 置き換えることと、読む先（節と standards.md の絶対パス）だけ。
 # 上流 tdd の本文とこの差し込みのどちらが先に読まれるかは文書化されていないので、文面はどちらの順でも
 # 上流の合意手順を置き換えるように書く。
 # jq 不在は黙って成功にしない: stderr に出して exit 1（non-blocking）。入力が読めない・判定対象外は exit 0。
@@ -43,9 +44,6 @@ msg="あなたは claude/issue-${issue} で mattpocock-skills:tdd を実行す�
 msg+="上流 tdd の「シームを書き出してユーザーと合意する」は、この指示で置き換える（上流の本文がこの後に読まれても同じ）。"
 msg+="AskUserQuestion を出さない。返事を待たない。"
 msg+="最初のテストを書く前に ${section} の「払い出された tdd のシーム」を読み、その手順に従う。"
-msg+="要点: (1) ${standards} と、対象リポでコードの書き方を定めた文書を読み、基準に反するシームを選ばない。"
-msg+="(2) シームを決めたら、最初のテストを書く前に issue #${issue} へ見出し「## シーム」のコメントを 1 件残す"
-msg+="（シーム｜捉えるもの｜捉えないもの｜根拠 の表と、検討してやめた案）。"
-msg+="(3) コメントを残したら、そのまま実装に進む。"
+msg+="Standards の基準文書 standards.md は ${standards} にある。"
 
 jq -n --arg ctx "$msg" '{hookSpecificOutput: {hookEventName: "PostToolUse", additionalContext: $ctx}}'

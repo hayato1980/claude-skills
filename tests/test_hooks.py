@@ -182,7 +182,7 @@ class TestDenyImplement:
 
 
 class TestHooksJson:
-    def test_registers_both_hooks_via_plugin_root(self) -> None:
+    def test_registers_all_hooks_via_plugin_root(self) -> None:
         cfg = json.loads((HOOKS / "hooks.json").read_text())["hooks"]
         submit = cfg["UserPromptSubmit"][0]["hooks"][0]["command"]
         post = {entry["matcher"]: entry["hooks"][0]["command"] for entry in cfg["PostToolUse"]}
@@ -228,7 +228,7 @@ class TestTddSeamPolicy:
         assert out["hookEventName"] == "PostToolUse"
         ctx = out["additionalContext"]
         assert "AskUserQuestion を出さない" in ctx and "返事を待たない" in ctx
-        assert "issue #54" in ctx and "## シーム" in ctx
+        assert "claude/issue-54" in ctx
         assert "払い出された tdd のシーム" in ctx
 
     def test_paths_in_the_policy_point_at_real_plugin_files(self, tmp_path: Path) -> None:
@@ -244,7 +244,7 @@ class TestTddSeamPolicy:
 
     def test_leading_slash_in_skill_name_is_accepted(self, tmp_path: Path) -> None:
         proc = run_seam("/mattpocock-skills:tdd", cwd=make_repo(tmp_path / "r", "claude/issue-3"))
-        assert "issue #3" in json.loads(proc.stdout)["hookSpecificOutput"]["additionalContext"]
+        assert "claude/issue-3" in json.loads(proc.stdout)["hookSpecificOutput"]["additionalContext"]
 
     @pytest.mark.parametrize("skill", ["mattpocock-skills:diagnosing-bugs", "tdd", "other:tdd", None])
     def test_other_skills_get_nothing(self, tmp_path: Path, skill: str | None) -> None:
@@ -260,7 +260,7 @@ class TestTddSeamPolicy:
     def test_branch_falls_back_to_project_dir_without_cwd(self, tmp_path: Path) -> None:
         repo = make_repo(tmp_path / "r", "claude/issue-9")
         proc = run_seam("mattpocock-skills:tdd", cwd=None, env_extra={"CLAUDE_PROJECT_DIR": str(repo)})
-        assert "issue #9" in json.loads(proc.stdout)["hookSpecificOutput"]["additionalContext"]
+        assert "claude/issue-9" in json.loads(proc.stdout)["hookSpecificOutput"]["additionalContext"]
 
     def test_outside_a_git_repo_gets_nothing(self, tmp_path: Path) -> None:
         proc = run_seam("mattpocock-skills:tdd", cwd=tmp_path)
