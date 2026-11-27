@@ -11,3 +11,4 @@
 | [0005](./0005-model-follows-whether-errors-surface-immediately.md) | 払い出しのモデルは「誤りが即座に可視化されるか」で選ぶ |
 | [0006](./0006-config-tests-evaluate-with-the-tool.md) | 設定・IaC のテストは、ソースを正規表現で読まず、ツール自身に評価させた値で確かめる（0007 で全テストに拡大） |
 | [0007](./0007-tests-do-not-read-file-contents-with-regex.md) | テストコードは、ファイルの中身を grep・正規表現で読んで確かめない |
+| [0008](./0008-counterpart-rule-lives-in-one-script.md) | 相手引きの規則はスクリプトの 1 か所だけ。中継が無ければ人へ渡し、文書の写しは残さない |

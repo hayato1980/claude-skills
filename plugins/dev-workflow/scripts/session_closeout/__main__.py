@@ -1,4 +1,5 @@
-"""CLI: `session_closeout.sh <list_sessions の結果ファイル（取得順）>... [--session <get_session の結果ファイル>]... [--issue N ...] [--repo owner/repo]`。
+"""CLI（締めの判定。先頭の語 `counterpart` / `events` で、セッションの関係を読む別の問い合わせになる → counterpart.py / events.py）:
+`session_closeout.sh <list_sessions の結果ファイル（取得順）>... [--session <get_session の結果ファイル>]... [--issue N ...] [--repo owner/repo]`。
 
 終了コード: 0 = 判定を出した / 2 = ページが足りない（次の `after_id` を stderr に出す）/
 3 = list_sessions の行に session_context が無く、get_session での補完が要る（id を stderr に出す）/ 1 = 入力・通信の失敗。
@@ -150,6 +151,15 @@ def _github_pr_from_env(repo: str) -> FetchPr:
 
 
 def main(argv: list[str] | None = None, fetch: Fetch | None = None, fetch_pr: FetchPr | None = None) -> int:
+    args_in = sys.argv[1:] if argv is None else argv
+    if args_in[:1] == ["counterpart"]:
+        from .counterpart import run as run_counterpart
+
+        return run_counterpart(args_in[1:])
+    if args_in[:1] == ["events"]:
+        from .events import run as run_events
+
+        return run_events(args_in[1:])
     ap = argparse.ArgumentParser(prog="session_closeout.sh", description=__doc__)
     ap.add_argument("pages", nargs="+", type=Path, help="list_sessions の結果ファイル（取得順）")
     ap.add_argument("--issue", type=int, action="append", help="対象を絞る issue 番号（複数可）")
@@ -159,7 +169,7 @@ def main(argv: list[str] | None = None, fetch: Fetch | None = None, fetch_pr: Fe
     ap.add_argument("--session", action="append", type=Path, default=[],
                     help="get_session の結果ファイル（要補完の id ごとに 1 つ。複数可）")
     ap.add_argument("--format", choices=["table", "json"], default="table")
-    args = ap.parse_args(argv)
+    args = ap.parse_args(args_in)
 
     try:
         repo = args.repo or _default_repo()

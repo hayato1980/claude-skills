@@ -57,18 +57,14 @@ class TestPrReviewDispatch:
         assert "resolve しない" in ctx
         assert "相手を引く" in ctx and "ポーク" in ctx and "自己チェックイン" in ctx and "購読" in ctx
 
-    def test_reminder_pulls_the_peer_by_issue_tag_and_branches_like_the_skill(self) -> None:
-        # #47: create-ccw-session 手順 1 と同じ意味。相手は issue-<番号> タグで引き自分を除く。
-        # 候補ごとに revision を読み、(a) claude/issue-<番号> そのもの → 払い出さない、
-        # (b) どれも別の値・未設定 → 払い出す、(c) 読めない行がある → 払い出さずに人へ渡す。
+    def test_reminder_hands_the_lookup_to_the_counterpart_script(self) -> None:
+        # 判断 0008: 相手引きの規則はスクリプトの 1 か所だけ。hook はその呼び方と、結果ごとの動作だけを渡す。
         ctx = json.loads(run_dispatch("claude/issue-7").stdout)["hookSpecificOutput"]["additionalContext"]
-        assert "tags に issue-7 を含み" in ctx
-        assert "自分自身を除" in ctx
-        assert "tags のフロー語では判定しない" in ctx
-        assert "候補が 0 行なら" in ctx
-        assert "claude/issue-7 そのものの行があれば" in ctx and "払い出さない" in ctx
-        assert "どれも別の値・未設定なら" in ctx and "払い出す" in ctx
-        assert "読めない行があれば" in ctx and "人へ渡す" in ctx
+        assert "scripts/ci/session_closeout.sh counterpart --want reviewer --issue 7" in ctx
+        assert "found なら" in ctx and "払い出さない" in ctx
+        assert "none なら" in ctx and "create_session" in ctx
+        assert "ambiguous" in ctx and "人へ渡す" in ctx
+        assert "tags に issue-7 を含み" not in ctx  # 規則の写しは残さない
 
     def test_head_is_read_from_tool_response_when_tool_input_has_none(self) -> None:
         resp = {"head": {"ref": "claude/issue-88"}}

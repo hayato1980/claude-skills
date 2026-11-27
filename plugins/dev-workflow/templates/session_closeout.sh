@@ -6,7 +6,7 @@
 # あるため、中継を残している（先頭に bash を付けると auto mode で許可ルールが無効になる）。
 #
 # プラグイン本体の場所は ~/.claude/plugins/installed_plugins.json から探す。
-# 使い方: scripts/ci/session_closeout.sh <list_sessions の結果ファイル（取得順）>... [--issue N ...] [--repo owner/repo]
+# 使い方: scripts/ci/session_closeout.sh [counterpart|events] <保存ファイル>... [...]  （先頭の語が無ければ締めの判定）
 set -euo pipefail
 
 readonly PLUGIN_KEY="dev-workflow@hayato"

@@ -80,6 +80,8 @@
 プラグイン本体の場所を `~/.claude/plugins/installed_plugins.json` から探して呼ぶだけで、ロジックは持たない。
 許可ルール `Bash(scripts/ci/ready_wait_merge.sh*)` が固定のパスを指す必要があるため、中継を残している。
 `session-closeout` も同じ形で、[`templates/session_closeout.sh`](./plugins/dev-workflow/templates/session_closeout.sh) を `scripts/ci/session_closeout.sh` に置き、許可ルール `Bash(scripts/ci/session_closeout.sh*)` を足す。対象リポは `git remote origin` から読む（設定ファイルは要らない）。
+**`review-dialogue` を使うリポにも `session_closeout` の中継と許可ルールが要る**（往復の「相手を引く」を `counterpart` サブコマンドが判定するため。`session-closeout` を使わないリポでも同じ）。中継が無いと、スキルは「相手を引けなかった」と明示して人へ渡す。
+`session_closeout` は締めの判定に限らず、セッションの関係を読む入口で、先頭の語で選ぶ（`counterpart` = 往復の相手 / 既存のレビュー、`events` = `list_events` の保存ファイルの読み出し、無ければ締めの判定）。
 許可ルールは `bash` を前置しない形で書く（auto mode では `bash …*` の許可ルールが無効になる）。
 
 無ければ、スキルは `git remote -v` などから推測するか、ユーザーに聞いて止まる。
