@@ -2,7 +2,7 @@
 name: create-ccw-session
 description: "起票済みの GitHub issue を、オーナーが承認したフロー（指定が無ければ親が案を出す）で子の CCW（Claude Code Web）セッションへ払い出す。「この issue を CCW で進めて」「#NNN を tdd で払い出して」「#NNN を review-dialogue に出して」「子セッションを立てて」で発動。"
 argument-hint: "#683 [#684 ...] [フロー語 (tdd|review-dialogue|diagnosing-bugs|grill-with-docs|...)]"
-allowed-tools: mcp__github__issue_read, mcp__github__pull_request_read, mcp__claude-code-remote__create_session, mcp__claude-code-remote__set_session_tags, mcp__claude-code-remote__get_session, mcp__claude-code-remote__list_sessions, Bash(grep:*), Bash(jq:*), Bash(ls:*), Bash(find:*), Bash(sort:*), Bash(tail:*), Read
+allowed-tools: mcp__github__issue_read, mcp__github__pull_request_read, mcp__claude-code-remote__create_session, mcp__claude-code-remote__set_session_tags, mcp__claude-code-remote__get_session, mcp__claude-code-remote__list_sessions, Bash(scripts/ci/session_closeout.sh*), Bash(grep:*), Bash(jq:*), Bash(ls:*), Bash(find:*), Bash(sort:*), Bash(tail:*), Read
 ---
 
 Use this skill when: handing an already-filed GitHub issue to a child CCW session, on a flow the owner has approved, instead of doing the work in this session.
@@ -277,7 +277,7 @@ create_session(
 - **フロー語は `review-dialogue`。** `prompt` は上の表の形で、スキル名は `dev-workflow:review-dialogue`（呼び出し例を参照）。
   `code-review` という語は**上流スキルの名前としてのみ残る**（器がその上流を内側で呼ぶ）。
 - `source_revision` に `claude/issue-<番号>` を渡す（実装済みブランチを起点にする）。**これを渡すのは
-  `review-dialogue` フローだけ**で、`revision` は、同じ issue のセッションが複数あるときにレビュー側を見分けるのに使う（候補の取り方は `issue-<番号>` タグ + 自分の除外。→ [runbook](../review-dialogue/runbook.md)「ラウンドの閉じ方」手順 1）。
+  `review-dialogue` フローだけ**で、`revision` は、相手を引くスクリプト（`counterpart`）がレビュー側を見分けるのに使う（→ [runbook](../review-dialogue/runbook.md)「ラウンドの閉じ方」手順 1）。
 - `outcome_branch` も同じ `claude/issue-<番号>`。
 - **レビュー側は push しない。** 指摘は PR 上のスレッドとして投稿し、**直すのは修正側**（＝その PR を作ったセッション）。
   両者は全スレッドが解決するまで往復する（→ [runbook](../review-dialogue/runbook.md)）。読むだけのレビューにしないのは、
@@ -320,20 +320,15 @@ mcp__claude-code-remote__set_session_tags(session_ids=["<自分の session id>"]
 するので必ず該当する）は、`claude/issue-<番号>` への push と draft PR 作成を終えたら、オーナーの指示を
 待たずに**自分自身で** review-dialogue セッションを払い出す。
 
-1. `list_sessions(mine=true, limit=100)` を引き、[runbook](../review-dialogue/runbook.md)「ラウンドの閉じ方」手順 1 の
-   **「相手を引く」と同じ読み方**（保存ファイルに書き、`grep | jq` で、アーカイブ済みを除いて読む）で、既存の
-   review-dialogue セッションが無いか確認する。**`tags` のフロー語では判定しない。**
-   `tags` に `issue-<番号>` を含み、アーカイブ済みでなく、**自分自身
-   （除き方は [runbook](../review-dialogue/runbook.md)「ラウンドの閉じ方」手順 1。環境変数と行の `id` は接頭辞が違う）
-   を除いた**行を候補とする。自分（修正側）も同じ `issue-<番号>` タグを持つので、自分を除かないと自分自身を
-   「既に走っている」と誤判定して払い出しをスキップしてしまう。
-   候補が 0 行なら払い出す（手順 2 へ）。1 行以上なら、候補ごとに `get_session(session_id)` で
-   `session_context.sources[0].git_repository.revision` を読む（`list_sessions` の行では欠けるが `get_session`
-   では読める）。
-   - `claude/issue-<番号>` **そのもの**の行がある → 既に走っている。払い出さず、既存のものに任せる ——
-     2 本走らせると往復の「相手を引く」で相手が 2 件ヒットし、どちらも起こせなくなる。
-   - 無い（読めた上でどれも別の値・未設定） → 候補はレビュー側ではない（同じ issue の別セッション）。払い出す。
-   - 読めない行がある → 払い出さずに人へ渡す（既に走っているか判断できない）。
+1. 既存のレビューが無いか確かめる。`list_sessions(mine=true, limit=100)` を引き、保存ファイルを
+   [runbook](../review-dialogue/runbook.md)「ラウンドの閉じ方」手順 1 の**呼び方と終了コードの扱い**（2 = 次のページ、
+   3 = `get_session` で補う）で `scripts/ci/session_closeout.sh counterpart --want reviewer --issue <番号> …` に渡す。
+   判定の規則（候補・自分の除外・revision）はスクリプトの 1 か所だけにあり、ここには写さない。
+   - `found <session_id>` → 既に走っている。払い出さず、既存のものに任せる —— 2 本走らせると往復の「相手を引く」で相手が
+     2 件ヒットし、どちらも起こせなくなる。
+   - `none` → 払い出す。
+   - `ambiguous …`、または中継が無い・失敗した・`get_session` の呼び出しが失敗した → 払い出さずに人へ渡す
+     （既に走っているか判断できない）。
 2. 見つからなければ、[上の「そのレビューを払い出す」呼び出し例](#呼び出し例)と**同じ引数**で `create_session` を
    自分で 1 回呼ぶ。`title` の issue タイトルと第 3 タグは、自分が最初に受け取った issue 番号から
    `mcp__github__issue_read` で取り直す。**[払い出す前の門](#払い出す前の門)は通し直さない** —— 実装の払い出しで
@@ -408,11 +403,11 @@ PR をマージしても "Other" のまま変わらない。
 | 追加指示を送る | `mcp__claude-code-remote__send_message` |
 | 止める | `mcp__claude-code-remote__interrupt_session` |
 | 終わったセッションを片付ける | `mcp__claude-code-remote__archive_session`（知見の着地と後続の払い出しを済ませてから） |
-| 払い出し済み・往復の相手を引く | `mcp__claude-code-remote__list_sessions`。**`mine=true`, `limit=100` で引き、保存されたファイルを `grep \| jq` で読み、返ってきた各行の `tags` を自分で突き合わせる。** 作法の正準は [runbook](../review-dialogue/runbook.md)「ラウンドの閉じ方」手順 1 |
+| 払い出し済み・往復の相手を引く | `mcp__claude-code-remote__list_sessions`（`mine=true`, `limit=100`）の保存ファイルを `scripts/ci/session_closeout.sh counterpart` に渡す。作法の正準は [runbook](../review-dialogue/runbook.md)「ラウンドの閉じ方」手順 1 |
 
 **`list_sessions` の `tags` 引数では絞り込めない。** この引数は OAuth caller 専用で、セッションの中から呼ぶとエラーに
 なる。**払い出し時に `tags` を付けているのはこのスキルなので、引く側が何を頼りにするかはここの責任範囲にある。**
-突き合わせの作法そのもの（`limit`・ページ送り・アーカイブ済みの除外・複数ヒットの決め方）は runbook が正準で、
+突き合わせの規則そのもの（アーカイブ済みの除外・自分の除外・複数ヒットの決め方）はスクリプトが 1 か所に持ち、呼び方は runbook が正準で、
 ここには書き写さない —— 往復の両側が毎ラウンド相手を引く以上、規則が 2 箇所にあると割れる。
 
 払い出した issue は子に任せ、**親はこのセッションで別の作業に移る**。同じ issue の修正を親でも進めると、子の変更と

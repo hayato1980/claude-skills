@@ -46,54 +46,47 @@
 
 ### 1. 相手を引く
 
-```
-mcp__claude-code-remote__list_sessions(mine=true, limit=100)
-```
+**判定はスクリプトが持つ。** 候補の絞り込み・自分の除外・向き・曖昧なときの拒否は `scripts/ci/session_closeout.sh counterpart` の 1 か所だけにあり（→ [判断 0008](https://github.com/hayato1980/claude-skills/blob/main/docs/decisions/0008-counterpart-rule-lives-in-one-script.md)）、この文書にも他のスキルにも写さない。MCP を呼んで結果ファイルを渡す手順だけが prose に残る。
 
-返ってきた各行の **`tags`**・**`session_status`** を見て、次を**すべて**満たす行を集める。
+1. 一覧を取る。結果は大きく、ツールが**ファイルに保存する**ので、保存されたパスをそのまま使う（`limit` は API の上限 100）。
 
-- `tags` に `issue-<番号>` を含む（issue を持たない PR では、代わりに `pr-<PR番号>` を含む。PR の head が `claude/issue-<番号>` 型ならどちらでもよい）
-- `session_status` が **`SESSION_STATUS_ARCHIVED` でない**
-- **自分自身ではない** —— 自分の行を除く。**環境変数 `CLAUDE_CODE_REMOTE_SESSION_ID` と行の `id` は接頭辞が違う**（環境変数は `cse_015Gb…`、行の `id` は `session_015Gb…`。接頭辞より後ろは同じ）ので、そのままでは一致しない。`SELF="${CLAUDE_CODE_REMOTE_SESSION_ID#cse_}"` で接頭辞を外し、行の `id` から `session_` を外した値と比べる（`get_session()` を session_id 省略で呼んで返る自分の `id` と比べてもよい）。**他の文書の「自分の除外」はこの記述を参照する**
+   ```
+   mcp__claude-code-remote__list_sessions(mine=true, limit=100)
+   ```
 
-残った行の数で決める。
+2. 呼ぶ。`--want` は**探す側**: 自分がレビュー側なら `fixer`、修正側なら `reviewer`。
 
-- **1 行** → それが相手。
-- **0 行** → 相手が引けない（正常系。下記）。
-- **2 行以上** → 候補ごとに `get_session(session_id)` で `session_context.sources[0].git_repository.revision` を読み（`list_sessions` の行では欠けるが `get_session` では読める）、絞り込む。**自分がレビュー側なら修正側を探す**ので revision が `claude/issue-<番号>`（issue を持たない PR では PR の head ブランチ名）**以外**（`get_session` で読めた上で未設定のもの、`refs/heads/main` 等のデフォルトブランチを含む）、**自分が修正側ならレビュー側を探す**ので revision が `claude/issue-<番号>`（同上）**そのもの**の行だけ残す。1 行に絞れればそれが相手。絞っても複数残る、または `get_session` でも読めない行があるときは、下の「どれも起こさない」へ。
+   ```bash
+   scripts/ci/session_closeout.sh counterpart --want <reviewer|fixer> --issue <番号> <list_sessions の保存ファイル（取得順）>... [--session <get_session の保存ファイル>]...
+   ```
 
-**`revision` を引く条件にしてはいけない。** `list_sessions` の行では `session_context` が `null`（`sources` も欠ける）ことがあり、実測では 100 行すべてで null だったこともある（#30）。revision を必須条件にすると、**修正側からレビュー側が 0 件に見えてポークが空振りし、往復が静かに止まる**（レビュー側からの判定は否定形なので当たり、修正側の方向だけが壊れる）。`revision` は複数残ったときの絞り込みにだけ使う。
+   対象ブランチは既定で `claude/issue-<番号>`。PR の head がそれと違うとき（オーナーの直接セッションが作った PR など）は `--head <PR の head ブランチ>` を足す。issue を持たない PR は `--issue` の代わりに `--pr <PR番号> --head <PR の head ブランチ>`。自分の除外は、スクリプトが環境変数 `CLAUDE_CODE_REMOTE_SESSION_ID` から行う（接頭辞の違い `cse_` / `session_` も吸収する）。`bash` を前置せず単独で呼ぶ（許可ルールが固定パスを指すため）。
 
-**役割判定を `tags` のフロー語で行わない。** `tags` の第 3 要素（領域・種別タグ）は issue から機械的に決まる（→ [`create-ccw-session`](../create-ccw-session/SKILL.md)「`create_session` の引数」）ため、issue タイトルがフロー語そのものを含むと、第 3 タグとフロー語タグが同じ文字列になり区別できない（実測で踏んだ）。相手を引く条件は `issue-<番号>` タグと自分の除外で、フロー語タグには頼らないので、この衝突に影響されない。
+3. 終了コードで次を決める。
+   - **2** → ページが足りない。stderr の `after_id` で `list_sessions(mine=true, limit=100, after_id=…)` を引き、保存ファイルを**末尾に足して**呼び直す。アーカイブ済みだけのページが 2 枚続けば、スクリプトがそこで打ち切る（実測 → #31）。
+   - **3** → `list_sessions` の行に `session_context` が無い（実測では常に無い → #30）。stderr の id を `get_session(session_id)` で引き、保存ファイルを `--session` で 1 つずつ足して呼び直す。**候補が 1 つでも必ず引く**（違う相手を起こしても手順上は成功に見えるため）。`get_session` の呼び出し自体が失敗した id は、呼び直さず「相手を引けなかった」として人へ渡す。
+   - **1** → 入力・読み取りの失敗。「相手を引けなかった」を明示して手順 3 へ進み、チェックインの中で人へ渡す。
+   - **0** → 標準出力の 1 行で決める。
+     - `found <session_id>` → それが相手。手順 2 へ。
+     - `none` → 相手が引けない（正常系。レビューがまだ払い出されていない、修正側がオーナーの手元セッションで `issue-<番号>` タグを持たない）。手順 2 を飛ばして 3 へ進む。
+     - `ambiguous <id>,<id>,…` → **どれも起こさない。** 同じ issue に押す子が 2 本走っている異常事態なので、ポークは撃たずに手順 3 へ進み、チェックインの中で人へ渡す。新しい順などで 1 本選んではいけない（間違った相手を起こしても手順上は成功に見える）。
 
-**`RUNNING` に絞ってはいけない。** こちらの応答を待ってターンを終えた相手は `SESSION_STATUS_IDLE` で、往復の待ち時間のほとんどはこの状態にある。RUNNING 限定にすると**まさに起こすべき相手だけが引けなくなる**。外すのは archive 済み（＝終わった過去の子）だけでよい。
+**中継（`scripts/ci/session_closeout.sh`）が無い、または失敗するときも、黙って次へ進まない。** 「相手を引けなかった」を明示して手順 3 へ進み、人へ渡す。古い手順（`list_sessions` を `jq` で読む）へ戻らない —— 規則が 2 箇所にあると割れる。中継は各リポに置く（→ [README](https://github.com/hayato1980/claude-skills/blob/main/README.md)「各リポに置く中継スクリプト」）。
 
-**絞り込み後も複数残ったら、どれも起こさない。** 同じ issue に押す子が 2 本走っている異常事態なので、**ポークは撃たずに手順 3 へ進み、チェックインの中で人へ渡す**。新しい順などで 1 本選んではいけない —— `title` を捨てた理由（**間違った相手を起こしても手順上は成功に見える**）が、そのまま当てずっぽうの選択にも当てはまる。
+**やってはいけないこと**（スクリプトの判定は、これらを避けるように作ってある。変えるときは判断 0002 / 0008 を読む）:
 
-- **`limit` は 100（API の上限）。** 1 セッションあたり約 2.7KB あり、20 件でもツール結果の上限を超える。溢れた結果は弾かれずに**ファイルへ保存される**ので（実測 → [環境の前提](#環境の前提実測状況)）、件数を絞る意味は無い。一度に最大件数を取り、保存されたファイルを `jq` で読む。
-- **保存されたファイルは、archive 済みを落としてから読む。** 直近 100 件の 87 件が archive 済みだった（2026-10-18 実測）。ファイルは 4 行で、3 行目だけが JSON（前後はラッパー）なので、`grep` で JSON 行を取り出して `jq` に渡す。出力は 4 列（`id`・`session_status`・`tags`・`revision`）の TSV と、最終行の `has_more` / `last_id`：
-
-  ```bash
-  grep '^ *{"ccr"' <保存されたファイル> | jq -r '.ccr
-    | (.data[] | select(.session_status != "SESSION_STATUS_ARCHIVED")
-       | [.id, .session_status, ((.tags // []) | join(",")),
-          (.session_context.sources[0].git_repository.revision // "-")] | @tsv),
-      "has_more=\(.has_more) last_id=\(.last_id)"'
-  ```
-
-  結果がファイルに落ちずにそのまま返ってきたときは、その JSON を同じ条件で読めばよい。
-- **`jq` が無いときは、黙って次へ進まない。** `command -v jq` で確かめ、無ければ「相手を引けなかった」を明示して手順 3 へ進み、チェックインの中で人へ渡す（`jq` 不在を「相手が 0 件」と取り違えると、往復が静かに止まる）。
-- **archive 済みはサーバー側では除けない。** `list_sessions` の引数は `mine` / `limit` / `after_id` / `before_id` / `tags` だけで、状態で絞る引数は無い。archive 済みは古い側にまとまっているわけでもない（新しい行の間にも挟まる）ので、「archive 済みが続いたら打ち切る」はできない。続きは `has_more` が true の間 `after_id=<last_id>` で取る。往復の相手はほぼ確実に直近のセッションなので、1 ページ目で当たる。
-- `list_sessions` の **`tags` 引数**は OAuth caller 専用で、子セッションからはエラーになる。**返ってきた JSON の `tags` を自分で突き合わせる。**
-- **`title` で突き合わせない。** 実データの title には `[tっd]` / `[codereview]` のような打ち間違いが現にある（tags 側は正しい）。title に寄せると、**間違った相手を起こしても手順上は成功に見える**。
-- **相手が引けないのは正常系**でもある（レビューがまだ払い出されていない、修正側がオーナーの手元セッションで `issue-<番号>` タグを持たない）。手順 2 を飛ばして 3 へ進む。
+- **`revision` を引く条件にしない。** 行に `session_context` が無いまま revision を必須条件にすると、修正側からレビュー側が 0 件に見えてポークが空振りし、往復が静かに止まる（#30）。revision は `get_session` で補ってから役割を決める。
+- **役割判定を `tags` のフロー語で行わない。** 第 3 タグとフロー語が同じ文字列になりうる。引く条件は `issue-<番号>`（または `pr-<PR番号>`）タグと revision。
+- **`RUNNING` に絞らない。** 待っている相手は `SESSION_STATUS_IDLE` で、往復の待ち時間のほとんどはこの状態にある。外すのはアーカイブ済みだけ。
+- **`title` で突き合わせない。** 実データの title には打ち間違いが現にある。
+- `list_sessions` の **`tags` 引数**は OAuth caller 専用で、子セッションからはエラーになる。サーバー側で絞る手段は無い。
 
 #### list_events の保存ファイルの読み方
 
-他セッションの会話を読むときの `list_events` は、`kinds=["assistant","result"]` に絞っても上限を超えてファイルに落ちる。`list_sessions` と同じく `grep` で JSON 行を取り出す（行番号に頼らない）。assistant のテキストが時系列に並び、`result`（ターンの終わり方）は `[result <subtype> is_error=<真偽>] <最終テキスト>` の 1 行で出る：
+他セッションの会話を読むときの `list_events` は、`kinds=["assistant","result"]` に絞っても上限を超えてファイルに落ちる。スクリプトが保存ファイルから JSON 行を取り出す（行番号に頼らない）。assistant のテキストが時系列に並び、`result`（ターンの終わり方）は `[result <subtype> is_error=<真偽>] <最終テキスト>` の 1 行で出る：
 
 ```bash
-grep '^ *{"ccr"' <保存されたファイル> | jq -r '.ccr.data[] | (.assistant.internal_anthropic_catchall.message.content[]? | select(.type=="text") | .text), (.result.internal_anthropic_catchall? // empty | "[result \(.subtype) is_error=\(.is_error)] \(.result)")'
+scripts/ci/session_closeout.sh events <保存されたファイル>
 ```
 
 結果がファイルに落ちずにそのまま返ってきたときは、その JSON を同じ条件で読めばよい。
@@ -399,7 +392,7 @@ mcp__github__add_reply_to_pull_request_comment(owner, repo, pullNumber, commentI
 | draft に戻す（CI 赤） | `update_pull_request(draft=true)` |
 | オーナーマージ対象の印 | `issue_write` でラベル `needs-owner-merge` を付ける |
 | 購読 / 解除 | `subscribe_pr_activity` / `unsubscribe_pr_activity` |
-| 相手を引く | `list_sessions`（**`mine=true` で引いて `tags` を自分で突き合わせる**） |
+| 相手を引く | `list_sessions`（`mine=true, limit=100`）→ `scripts/ci/session_closeout.sh counterpart`（手順 1） |
 | 相手を起こす | `create_trigger`（`persistent_session_id` ＋ `run_once_at`） |
 | 自己チェックイン | `send_later` ／ 消すのは `delete_trigger` |
 | ポークの結末を見る | `list_triggers(include_completed=true)` の `last_run` |

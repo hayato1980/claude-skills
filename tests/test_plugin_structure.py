@@ -67,9 +67,6 @@ def test_retro_closeout_can_read_list_events_dump_without_prompts() -> None:
         assert tool in tools, tool
 
 
-RUNBOOK = PLUGIN / "skills" / "review-dialogue" / "runbook.md"
-LIST_EVENTS_HEADING = "list_events の保存ファイルの読み方"
-
 
 def heading_slugs(path: Path) -> set[str]:
     """GitHub が見出しから作るアンカー（小文字・空白は -・句読点は除く）を集める。"""
@@ -91,19 +88,6 @@ def test_link_anchors_in_skills_and_runbook_resolve_to_headings() -> None:
         if (doc.parent / target).suffix == ".md" and anchor not in heading_slugs((doc.parent / target).resolve())
     ]
     assert not broken, broken
-
-
-def test_runbook_list_events_command_prints_assistant_text_and_result() -> None:
-    # runbook が正準として置く 1 行を、保存ファイルの形をしたフィクスチャに対して実行する。
-    text = RUNBOOK.read_text(encoding="utf-8")
-    section = text.split(f"#### {LIST_EVENTS_HEADING}", 1)[1]
-    command = section.split("```bash\n", 1)[1].split("\n```", 1)[0]
-    dump = Path(__file__).parent / "fixtures" / "list_events_dump.txt"
-    out = subprocess.run(
-        ["bash", "-c", command.replace("<保存されたファイル>", str(dump))],
-        capture_output=True, text=True, check=True,
-    ).stdout
-    assert out.splitlines() == ["first reply", "second reply", "[result success is_error=false] final text"]
 
 
 def test_scripts_are_executable_and_shellcheck_clean() -> None:
