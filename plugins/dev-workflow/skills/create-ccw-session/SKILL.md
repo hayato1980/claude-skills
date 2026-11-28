@@ -325,7 +325,7 @@ mcp__claude-code-remote__set_session_tags(session_ids=["<自分の session id>"]
 
 1. 既存のレビューが無いか確かめる。`list_sessions(mine=true, limit=100)` を引き、保存ファイルを
    [runbook](../review-dialogue/runbook.md)「ラウンドの閉じ方」手順 1 の**呼び方と終了コードの扱い**（2 = 次のページ、
-   3 = `get_session` で補う）で `scripts/ci/session_closeout.sh counterpart --want reviewer --issue <番号> …` に渡す。
+   3 = `get_session` で補う）で `scripts/ci/session_closeout.sh counterpart --want reviewer --issue <番号> --since <issue の created_at> …` に渡す（`created_at` は `issue_read` から。打ち切りの根拠になる）。
    判定の規則（候補・自分の除外・revision）はスクリプトの 1 か所だけにあり、ここには写さない。
    - `found <session_id>` → 既に走っている。払い出さず、既存のものに任せる —— 2 本走らせると往復の「相手を引く」で相手が
      2 件ヒットし、どちらも起こせなくなる。

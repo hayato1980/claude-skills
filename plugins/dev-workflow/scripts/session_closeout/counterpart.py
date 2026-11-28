@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .bundles import (EXIT_INCOMPLETE, EXIT_NEEDS_CONTEXT, Grouping, ListingIncomplete, Session, group, issue_branch,
-                      needs_context_message, read_listing)
+                      needs_context_message, parse_timestamp, read_listing)
 from .environment import default_repo, default_self_id
 
 
@@ -44,6 +44,9 @@ def run(argv: list[str]) -> int:
     which.add_argument("--issue", type=int, help="issue 番号（タグ issue-<番号>）")
     which.add_argument("--pr", type=int, help="issue を持たない PR の番号（タグ pr-<番号>。--head が要る）")
     ap.add_argument("--head", help="PR の head ブランチ（対象ブランチ）。--issue と併用すると claude/issue-<番号> より優先する")
+    ap.add_argument("--since", help="対象の issue（PR）の作成時刻（ISO 8601）。読んだ最も古い行がこれより前に届いたら、"
+                    "続きのページを読まずに判定する。`--want reviewer` のときだけ渡す（レビュー側は対象より後に払い出されるが、"
+                    "修正側は対象より前に作られうるので、`fixer` では取りこぼす）。無ければ最後のページまで読む")
     ap.add_argument("--self-id", default=default_self_id(), help="除外する自分の session id（既定は環境変数から）")
     ap.add_argument("--repo", help="owner/repo（既定は git remote origin）")
     ap.add_argument("--session", action="append", type=Path, default=[], help="get_session の結果ファイル")
@@ -51,6 +54,7 @@ def run(argv: list[str]) -> int:
     try:
         target = Target.from_args(args)
         repo = args.repo or default_repo()
+        since = parse_timestamp(args.since) if args.since else None
         if not args.self_id:
             raise ValueError("自分の session id が決まらない（環境変数 CLAUDE_CODE_REMOTE_SESSION_ID か --self-id）。"
                              "自分の除外が黙って無効になるので止める")
@@ -59,7 +63,7 @@ def run(argv: list[str]) -> int:
         return 1
 
     try:
-        pages, _ = read_listing(args.pages, args.session, confirm_all=True)
+        pages, _ = read_listing(args.pages, args.session, confirm_all=True, since=since)
     except ListingIncomplete as e:
         print(e, file=sys.stderr)
         return EXIT_INCOMPLETE
