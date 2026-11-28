@@ -152,3 +152,28 @@ def test_decision_0006_states_the_four_acceptance_points() -> None:
     decided = body.split("## 決めたこと")[1].split("\n## ")[0]
     assert "ツール自身に評価させ" in decided
 
+
+
+def _section(path: Path, heading: str) -> str:
+    """`## <heading>` から次の `## ` 直前までの本文を返す。"""
+    text = path.read_text(encoding="utf-8")
+    m = re.search(rf"^## {re.escape(heading)}\n(.*?)(?=^## |\Z)", text, re.S | re.M)
+    assert m, f"見出しがありません: {heading}"
+    return m.group(1)
+
+
+CREATE_CCW = PLUGIN / "skills" / "create-ccw-session" / "SKILL.md"
+
+
+def test_flow_existence_check_rejects_model_invocation_disabled_skills() -> None:
+    # SKILL.md があるだけで払い出すと、子が Skill ツールに断られて最初のターンで止まる（#60）。
+    section = _section(CREATE_CCW, "フロー語の実在確認")
+    assert "disable-model-invocation: true" in section
+
+
+def test_create_ccw_session_examples_use_only_skill_tool_invocable_flow_words() -> None:
+    # grill-with-docs / triage は disable-model-invocation: true。例や表に残すと、そのまま払い出す手本になる（#60）。
+    text = CREATE_CCW.read_text(encoding="utf-8")
+    assert "grill-with-docs" not in text
+    model_table = _section(CREATE_CCW, "`create_session` の引数")
+    assert "| `triage` |" not in model_table
