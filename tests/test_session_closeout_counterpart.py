@@ -234,3 +234,26 @@ def test_without_since_the_old_rule_still_reads_to_the_end(tmp_path: Path, capsy
     page = _page(tmp_path, "p1", [_row("session_old", ["issue-7"], created_at="2020-01-01T00:00:00Z")], has_more=True)
     rc, _, _ = _run(["--want", "reviewer", "--issue", "49", str(page)], capsys)
     assert rc == EXIT_INCOMPLETE
+
+
+def test_since_cutoff_still_finds_the_counterpart_on_the_page_it_stopped_at(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # 打ち切るページに相手がいるとき: session_context が無いので終了コード 3、get_session を足せば found。
+    rows = [_row("session_rev", ["issue-49"], created_at="2026-11-27T14:00:00Z"),
+            _row("session_old", ["issue-7"], created_at="2026-11-27T13:00:00Z")]
+    page = _page(tmp_path, "p1", rows, has_more=True)
+    argv = ["--want", "reviewer", "--issue", "49", "--since", "2026-11-27T13:54:12Z", str(page)]
+    rc, _, err = _run(argv, capsys)
+    assert rc == EXIT_NEEDS_CONTEXT and "session_rev" in err
+    detail = _detail(tmp_path, "session_rev", ISSUE_BRANCH)
+    rc, out, _ = _run([*argv, f"--session={detail}"], capsys)
+    assert (rc, out.strip()) == (0, "found session_rev")
+
+
+def test_unreadable_created_at_does_not_break_a_listing_read_without_since(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    page = _page(tmp_path, "p1", [_row("session_other", ["issue-7"], created_at="not-a-time")])
+    rc, out, _ = _run(["--want", "reviewer", "--issue", "49", str(page)], capsys)
+    assert (rc, out.strip()) == (0, "none")

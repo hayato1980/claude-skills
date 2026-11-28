@@ -105,6 +105,16 @@ def parse_timestamp(text: str) -> datetime:
     return t if t.tzinfo else t.replace(tzinfo=timezone.utc)
 
 
+def _lenient_timestamp(text: str | None) -> datetime | None:
+    """行の created_at。読めない値は None に倒す（打ち切りの根拠にしない）。--since 側の入力は parse_timestamp で厳格に見る。"""
+    if not text:
+        return None
+    try:
+        return parse_timestamp(text)
+    except ValueError:
+        return None
+
+
 def _session(row: dict[str, Any]) -> Session:
     status = row.get("session_status", "")
     bucket = row.get("status_bucket")
@@ -121,7 +131,7 @@ def _session(row: dict[str, Any]) -> Session:
         repo_url=ref.url,
         title=row.get("title", ""),
         context_known=context is not None,
-        created_at=parse_timestamp(row["created_at"]) if row.get("created_at") else None,
+        created_at=_lenient_timestamp(row.get("created_at")),
     )
 
 
@@ -185,7 +195,7 @@ def next_after_id(pages: list[Page]) -> str | None:
 
     ページの JSON は自分がどの `after_id` で引かれたかを持たないので、途中のページの抜けは検出できない。
     検出できるのは順序の崩れ（最終ページが末尾に無い）だけで、それは ValueError にする。
-    打ち切るかどうかは `is_truncated` が別に決める（呼び出し側が 1 回だけ判定する）。
+    打ち切るかどうか（`is_truncated` / `is_older_than`）は `read_listing` が 1 回だけ判定する。
     """
     for i, page in enumerate(pages[:-1]):
         if not page.has_more:

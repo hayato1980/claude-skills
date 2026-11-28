@@ -45,7 +45,8 @@ def run(argv: list[str]) -> int:
     which.add_argument("--pr", type=int, help="issue を持たない PR の番号（タグ pr-<番号>。--head が要る）")
     ap.add_argument("--head", help="PR の head ブランチ（対象ブランチ）。--issue と併用すると claude/issue-<番号> より優先する")
     ap.add_argument("--since", help="対象の issue（PR）の作成時刻（ISO 8601）。読んだ最も古い行がこれより前に届いたら、"
-                    "続きのページを読まずに判定する（相手のセッションは対象より前には作られない）。無ければ最後のページまで読む")
+                    "続きのページを読まずに判定する。`--want reviewer` のときだけ渡す（レビュー側は対象より後に払い出されるが、"
+                    "修正側は対象より前に作られうるので、`fixer` では取りこぼす）。無ければ最後のページまで読む")
     ap.add_argument("--self-id", default=default_self_id(), help="除外する自分の session id（既定は環境変数から）")
     ap.add_argument("--repo", help="owner/repo（既定は git remote origin）")
     ap.add_argument("--session", action="append", type=Path, default=[], help="get_session の結果ファイル")
