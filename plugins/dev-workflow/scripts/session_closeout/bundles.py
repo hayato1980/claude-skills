@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass, field, replace
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -65,6 +66,8 @@ class Session:
     title: str
     # list_sessions の行には session_context が無い（get_session / create_session にだけ載る。#31）。
     context_known: bool = True
+    # list_sessions の行の created_at（ISO 8601）。無い行は None（打ち切りの根拠にしない）。
+    created_at: datetime | None = None
 
     def issue_numbers(self) -> list[int]:
         return [int(m.group(1)) for t in self.tags if (m := _ISSUE_TAG.match(t))]
@@ -93,6 +96,15 @@ class Page:
     last_id: str | None
 
 
+def parse_timestamp(text: str) -> datetime:
+    """ISO 8601（`Z` つきも可）を、時刻帯つきの datetime にする。時刻帯が無ければ UTC とみなす。"""
+    try:
+        t = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError as e:
+        raise ValueError(f"時刻として読めない: {text!r}（ISO 8601 で渡す）") from e
+    return t if t.tzinfo else t.replace(tzinfo=timezone.utc)
+
+
 def _session(row: dict[str, Any]) -> Session:
     status = row.get("session_status", "")
     bucket = row.get("status_bucket")
@@ -109,6 +121,7 @@ def _session(row: dict[str, Any]) -> Session:
         repo_url=ref.url,
         title=row.get("title", ""),
         context_known=context is not None,
+        created_at=parse_timestamp(row["created_at"]) if row.get("created_at") else None,
     )
 
 
@@ -154,6 +167,17 @@ def is_truncated(pages: list[Page], stop_after: int | None = None) -> bool:
     if stop_after is None or not pages or not pages[-1].has_more or len(pages) < stop_after:
         return False
     return all(p.sessions and all(s.status == ARCHIVED for s in p.sessions) for p in pages[-stop_after:])
+
+
+def is_older_than(pages: list[Page], since: datetime | None) -> bool:
+    """続きがあるのに、末尾のページが `since` より前の行に届いたので打ち切ってよい、か。
+
+    一覧は新しい順で、対象のセッションは対象（issue / PR）の作成時刻より前には作られない。
+    created_at の無い行は根拠にしない（その行だけでは「届いた」と決めない）。
+    """
+    if since is None or not pages or not pages[-1].has_more:
+        return False
+    return any(s.created_at is not None and s.created_at < since for s in pages[-1].sessions)
 
 
 def next_after_id(pages: list[Page]) -> str | None:
@@ -279,7 +303,8 @@ class ListingIncomplete(Exception):
     """続きのページが要る。メッセージは次に引く `after_id` を含み、そのまま stderr に出す。"""
 
 
-def read_listing(page_paths: list[Path], session_paths: list[Path], *, confirm_all: bool = False) -> tuple[list[Page], bool]:
+def read_listing(page_paths: list[Path], session_paths: list[Path], *, confirm_all: bool = False,
+                 since: datetime | None = None) -> tuple[list[Page], bool]:
     """結果ファイルを読み、ページの不足を検出し、`get_session` の結果で `session_context` を補う。
 
     `confirm_all` のときは、行に載っている `session_context` を信じず、`get_session` の結果がある行だけ確かめ済みとする。
@@ -287,7 +312,7 @@ def read_listing(page_paths: list[Path], session_paths: list[Path], *, confirm_a
     """
     pages = load_pages(page_paths)
     after_id = next_after_id(pages)  # 順序の誤りはここで検出する
-    truncated = is_truncated(pages, STOP_AFTER_ARCHIVED_PAGES)
+    truncated = is_truncated(pages, STOP_AFTER_ARCHIVED_PAGES) or is_older_than(pages, since)
     if after_id is not None and not truncated:
         raise ListingIncomplete(f'ページが足りない: list_sessions(mine=true, limit=100, after_id="{after_id}") の結果を末尾に足す')
     if confirm_all:

@@ -32,10 +32,13 @@ def _own_session(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("CLAUDE_CODE_REMOTE_SESSION_ID", "cse_unrelated")
 
 
-def _row(sid: str, tags: list[str], *, archived: bool = False) -> dict[str, Any]:
+def _row(sid: str, tags: list[str], *, archived: bool = False, created_at: str | None = None) -> dict[str, Any]:
     # 実測の list_sessions の行: session_context を持たない。
-    return {"id": sid, "session_status": "SESSION_STATUS_ARCHIVED" if archived else "SESSION_STATUS_IDLE",
-            "status_bucket": "SESSION_STATUS_BUCKET_COMPLETED", "tags": tags, "title": sid}
+    row: dict[str, Any] = {"id": sid, "session_status": "SESSION_STATUS_ARCHIVED" if archived else "SESSION_STATUS_IDLE",
+                           "status_bucket": "SESSION_STATUS_BUCKET_COMPLETED", "tags": tags, "title": sid}
+    if created_at:
+        row["created_at"] = created_at
+    return row
 
 
 def _page(tmp_path: Path, name: str, rows: list[dict[str, Any]], *, has_more: bool = False, last_id: str = "x") -> Path:
@@ -205,3 +208,29 @@ def test_head_overrides_the_issue_branch_for_a_pr_whose_head_is_not_the_issue_br
     revisions = {"session_fix": "main", "session_rev": "owner/direct-branch"}
     rc, out, _ = _ask(tmp_path, capsys, rows, revisions, "--want", "reviewer", "--issue", "49", "--head", "owner/direct-branch")
     assert (rc, out.strip()) == (0, "found session_rev")
+
+
+def test_since_stops_reading_when_the_page_reaches_back_before_the_target_was_created(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # 続きがあっても、読んだ最も古い行が対象の作成時刻より前なら、それ以降に対象のセッションは無い。
+    page = _page(tmp_path, "p1", [_row("session_new", ["issue-7"], created_at="2026-11-27T14:00:00Z"),
+                                  _row("session_old", ["issue-7"], created_at="2026-11-27T13:00:00Z")], has_more=True)
+    rc, out, _ = _run(["--want", "reviewer", "--issue", "49", "--since", "2026-11-27T13:54:12Z", str(page)], capsys)
+    assert (rc, out.strip()) == (0, "none")
+
+
+def test_since_keeps_asking_for_pages_while_every_row_is_newer_than_the_target(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    page = _page(tmp_path, "p1", [_row("session_new", ["issue-7"], created_at="2026-11-27T14:00:00Z")], has_more=True,
+                 last_id="session_new")
+    rc, out, err = _run(["--want", "reviewer", "--issue", "49", "--since", "2026-11-27T13:54:12Z", str(page)], capsys)
+    assert (rc, out) == (EXIT_INCOMPLETE, "")
+    assert 'after_id="session_new"' in err
+
+
+def test_without_since_the_old_rule_still_reads_to_the_end(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    page = _page(tmp_path, "p1", [_row("session_old", ["issue-7"], created_at="2020-01-01T00:00:00Z")], has_more=True)
+    rc, _, _ = _run(["--want", "reviewer", "--issue", "49", str(page)], capsys)
+    assert rc == EXIT_INCOMPLETE

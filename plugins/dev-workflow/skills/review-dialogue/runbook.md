@@ -57,14 +57,14 @@
 2. 呼ぶ。`--want` は**探す側**: 自分がレビュー側なら `fixer`、修正側なら `reviewer`。
 
    ```bash
-   scripts/ci/session_closeout.sh counterpart --want <reviewer|fixer> --issue <番号> <list_sessions の保存ファイル（取得順）>... [--session <get_session の保存ファイル>]...
+   scripts/ci/session_closeout.sh counterpart --want <reviewer|fixer> --issue <番号> --since <対象の作成時刻> <list_sessions の保存ファイル（取得順）>... [--session <get_session の保存ファイル>]...
    ```
 
-   対象ブランチは既定で `claude/issue-<番号>`。PR の head がそれと違うとき（オーナーの直接セッションが作った PR など）は `--head <PR の head ブランチ>` を足す。issue を持たない PR は `--issue` の代わりに `--pr <PR番号> --head <PR の head ブランチ>`。自分の除外は、スクリプトが環境変数 `CLAUDE_CODE_REMOTE_SESSION_ID` から行う（接頭辞の違い `cse_` / `session_` も吸収する）。`bash` を前置せず単独で呼ぶ（許可ルールが固定パスを指すため）。
+   対象ブランチは既定で `claude/issue-<番号>`。PR の head がそれと違うとき（オーナーの直接セッションが作った PR など）は `--head <PR の head ブランチ>` を足す。issue を持たない PR は `--issue` の代わりに `--pr <PR番号> --head <PR の head ブランチ>`。`--since` には対象の issue（`issue_read`）、PR を対象にするなら PR（`pull_request_read`）の `created_at` をそのまま渡す。相手のセッションは対象より前には作られないので、読んだ最も古い行がこの時刻より前に届いた時点で、スクリプトは続きのページを読まずに判定する（アーカイブ済みが溜まったアカウントで、`none` を言い切るために何ページも読まされない → #59）。省略すると今までどおり最後のページまで読むので、渡せるときは必ず渡す。自分の除外は、スクリプトが環境変数 `CLAUDE_CODE_REMOTE_SESSION_ID` から行う（接頭辞の違い `cse_` / `session_` も吸収する）。`bash` を前置せず単独で呼ぶ（許可ルールが固定パスを指すため）。
 
 3. 終了コードで次を決める。
    - **2** → ページが足りない。stderr の `after_id` で `list_sessions(mine=true, limit=100, after_id=…)` を引き、保存ファイルを**末尾に足して**呼び直す。アーカイブ済みだけのページが 2 枚続けば、スクリプトがそこで打ち切る（実測 → #31）。
-   - **3** → `list_sessions` の行に `session_context` が無い（実測では常に無い → #30）。stderr の id を `get_session(session_id)` で引き、保存ファイルを `--session` で 1 つずつ足して呼び直す。**候補が 1 つでも必ず引く**（違う相手を起こしても手順上は成功に見えるため）。`get_session` の呼び出し自体が失敗した id は、呼び直さず「相手を引けなかった」として人へ渡す。
+   - **3** → `list_sessions` の行に `session_context` が無い（実測では常に無い → #30）。stderr の id を `get_session(session_id)` で引き、保存ファイルを `--session` で 1 つずつ足して呼び直す。**候補が 1 つでも必ず引く**（違う相手を起こしても手順上は成功に見えるため）。`get_session` の呼び出し自体が失敗した id は、呼び直さず「相手を引けなかった」として人へ渡す。`get_session` の結果がファイルに保存されず画面にそのまま返ってきたときは、その JSON をそのままファイルに書いて `--session` に渡してよい（`list_events` の結果と同じ扱い）。
    - **1** → 入力・読み取りの失敗。「相手を引けなかった」を明示して手順 3 へ進み、チェックインの中で人へ渡す。
    - **0** → 標準出力の 1 行で決める。
      - `found <session_id>` → それが相手。手順 2 へ。
