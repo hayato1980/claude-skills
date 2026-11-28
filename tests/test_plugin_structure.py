@@ -92,7 +92,7 @@ def test_link_anchors_in_skills_and_runbook_resolve_to_headings() -> None:
 
 def test_scripts_are_executable_and_shellcheck_clean() -> None:
     targets = [*SCRIPTS.glob("*.sh"), *(PLUGIN / "hooks").glob("*.sh"), *TEMPLATES.glob("*.sh")]
-    assert len(targets) == 11
+    assert len(targets) == 12
     for t in targets:
         assert os.access(t, os.X_OK), t
         assert subprocess.run(["bash", "-n", str(t)], check=False).returncode == 0, t
