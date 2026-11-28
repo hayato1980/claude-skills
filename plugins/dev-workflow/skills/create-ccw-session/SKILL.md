@@ -1,7 +1,7 @@
 ---
 name: create-ccw-session
 description: "起票済みの GitHub issue を、オーナーが承認したフロー（指定が無ければ親が案を出す）で子の CCW（Claude Code Web）セッションへ払い出す。「この issue を CCW で進めて」「#NNN を tdd で払い出して」「#NNN を review-dialogue に出して」「子セッションを立てて」で発動。"
-argument-hint: "#683 [#684 ...] [フロー語 (tdd|review-dialogue|diagnosing-bugs|grill-with-docs|...)]"
+argument-hint: "#683 [#684 ...] [フロー語 (tdd|review-dialogue|diagnosing-bugs|grilling|...)]"
 allowed-tools: mcp__github__issue_read, mcp__github__pull_request_read, mcp__claude-code-remote__create_session, mcp__claude-code-remote__set_session_tags, mcp__claude-code-remote__get_session, mcp__claude-code-remote__list_sessions, Bash(scripts/ci/session_closeout.sh*), Bash(grep:*), Bash(jq:*), Bash(ls:*), Bash(find:*), Bash(sort:*), Bash(tail:*), Read
 ---
 
@@ -35,7 +35,7 @@ Use this skill when: handing an already-filed GitHub issue to a child CCW sessio
 
 ## 発動トリガー
 
-- 「#NNN を tdd で払い出して」「#NNN を review-dialogue に出して」「#NNN を grill-with-docs で」
+- 「#NNN を tdd で払い出して」「#NNN を review-dialogue に出して」「#NNN を grilling で」
 - 「この issue を CCW で進めて」「#NNN のセッションを起動して」「子セッションを立てて」「払い出して」
   → **フロー語が無いので、親が[フロー案](#フロー案の出し方)を出す**
 - スラッシュコマンド `/create-ccw-session #NNN [<フロー語>]`（プラグイン名つきの正式名は `/dev-workflow:create-ccw-session`）
@@ -99,9 +99,23 @@ find "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/cache" \( -path "*/skills/<flo
 プラグイン側はパスに**バージョンとカテゴリ（`engineering` / `productivity` 等）が入る**ので、`*` で受ける
 （版を固定で書くと更新で壊れる）。
 
-確認するのは**文字列が実在するか**だけで、そのフローが妥当かは見ない（妥当性はオーナーが指定したか、承認表で
-OK したことで担保される）。任意の語を通すと、解決しないスラッシュコマンドを受け取った子が 1 セッション丸ごと
-無駄になる。
+**`SKILL.md` があっても、frontmatter に `disable-model-invocation: true` がある語は払い出さない。** 子は
+prompt の指示どおり Skill ツールでその語を呼ぶが、Skill ツールは「disable-model-invocation のため使えない」と
+断り、子は最初のターンで止まってオーナーの手打ちを待つ（#54 を払い出した子が、この理由で止まった実例がある。#60）。
+見つけた `SKILL.md` ごとに frontmatter を読んで確かめる。
+
+```bash
+grep -l '^disable-model-invocation: true' <見つけた SKILL.md のパス>
+```
+
+ヒットしたら、**理由（Skill ツールから呼べない）を添えてオーナーに聞き返して止まる**。断られた語を、それが呼ぶ
+`grilling` や `domain-modeling` に、のように**近い語へ勝手に読み替えない**（上の「推測で近い語に寄せない」と
+同じ）。除外する語の一覧は持たない —— 一覧は手で増やす保守が要るので、この確認で一律に弾く。親のフロー案が
+ヒットしたときは、聞き返さず別の語を選び直す。
+
+確認するのは**文字列が実在するか**と**Skill ツールから呼べるか**で、そのフローが妥当かは見ない（妥当性はオーナーが
+指定したか、承認表で OK したことで担保される）。任意の語を通すと、解決しないスラッシュコマンドを受け取った子が
+1 セッション丸ごと無駄になる。
 
 ## フロー案の出し方
 
@@ -124,7 +138,7 @@ OK したことで担保される）。任意の語を通すと、解決しな�
    - **除外する語**: `implement` / `implement-spec` / `handoff` / `grill-me` / `retro` / `teach` /
      `wait-what` / `setup-matt-pocock-skills`。除外リスト方式にするのは、許可リストだとスキルが増えるたびに
      列挙の保守が要るため（→ [モデル割り当て](#モデル割り当て)と同じ理由）。
-   - **1 つに絞れないとき**（`grill-with-docs` か `tdd` か割れる等）: 聞き返して止めず、**第一案を載せ、
+   - **1 つに絞れないとき**（`grilling` か `tdd` か割れる等）: 聞き返して止めず、**第一案を載せ、
      次点とその理由を理由列に書く**。
    - 案にも[フロー語の実在確認](#フロー語の実在確認)をそのまま通す。
 
@@ -148,7 +162,7 @@ OK したことで担保される）。任意の語を通すと、解決しな�
 | issue | タイトル | フロー | model | 理由 |
 |---|---|---|---|---|
 | #683 | feat(skill): issue を CCW セッションへ払い出すスキルを作る | /mattpocock-skills:tdd | claude-sonnet-5-5 | 仕様が本文で確定済み |
-| #684 | feat(x): 方針が未確定の機能 | /mattpocock-skills:grill-with-docs | claude-opus-5-5 | 次点 tdd。範囲が未確定 |
+| #684 | feat(x): 方針が未確定の機能 | /mattpocock-skills:grilling | claude-opus-5-5 | 次点 tdd。範囲が未確定 |
 ```
 
 **オーナーが行を書き換えて返したら**、書き換えた語について[実在確認](#フロー語の実在確認)とモデルの引き直しを行い、
@@ -185,7 +199,6 @@ OK したことで担保される）。任意の語を通すと、解決しな�
 | `research` | `claude-sonnet-5-5` | 一次情報の収集と転記が主 |
 | `prototype` | `claude-sonnet-5-5` | 捨てる前提の試作 |
 | `resolving-merge-conflicts` | `claude-sonnet-5-5` | 機械的な突合が主 |
-| `triage` | `claude-sonnet-5-5` | ラベル付けと分類 |
 | 上記以外すべて | `claude-opus-5-5` | —— |
 
 **リポ固有スキルの行は `docs/agents/ccw-dispatch.md` の `## モデル表に足す行` で足す**（実験を回すだけのスキルを
@@ -194,7 +207,7 @@ sonnet にする等）。足していないリポ固有スキルは、既定の 
 方針は **「判断の質がそのまま成果になる作業は opus、手を動かす比率が高い作業は sonnet」**。opus 側は既定なので
 **表に載せない** —— 列挙式（表に載っている語だけ払い出せる）にすると、スキルが増えるたびに表の保守が要る
 （→ [判断 0005](https://github.com/hayato1980/claude-skills/blob/main/docs/decisions/0005-model-follows-whether-errors-surface-immediately.md)）。
-opus に残る語の例: `review-dialogue` / `grilling` / `grill-with-docs` / `diagnosing-bugs` / `domain-modeling` /
+opus に残る語の例: `review-dialogue` / `grilling` / `diagnosing-bugs` / `domain-modeling` /
 `issue-inventory` / `codebase-design`。
 
 **`review-dialogue` は opus から動かさない。** 実装と**別モデル**で差分を読み直すことが
@@ -270,8 +283,7 @@ create_session(
 読むのは同じセッション・同じモデルになる。
 
 **`claude/issue-<番号>` ブランチで PR を作った実装セッション（払い出された子）は、PR を作ったらレビューの払い出し
-（＝別セッションの `create_session` 呼び出し）を自分自身で行う。** フロー語は `tdd` に限らない（`diagnosing-bugs` /
-`grill-with-docs` 等も同じ）。禁止しているのは自己レビュー（`/review-dialogue` を自分の会話内で実行すること）
+（＝別セッションの `create_session` 呼び出し）を自分自身で行う。** フロー語は `tdd` に限らない（`diagnosing-bugs` 等も同じ）。禁止しているのは自己レビュー（`/review-dialogue` を自分の会話内で実行すること）
 であって、**レビューを行う別セッションを起動すること**は別の操作なので区別する。`claude/issue-<番号>` 以外のブランチで PR を作る
 セッション（ふつうの直接作業）は、引き続きオーナーが `/create-ccw-session #NNN review-dialogue` で手動払い出しする。
 
